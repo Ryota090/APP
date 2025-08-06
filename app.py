@@ -18,13 +18,14 @@ app = Flask(__name__)
 
 # セキュリティ設定
 app.secret_key = os.environ.get('SECRET_KEY', Fernet.generate_key())
-app.config['SESSION_COOKIE_SECURE'] = True
+# 本番環境でのみHTTPSを強制
+app.config['SESSION_COOKIE_SECURE'] = os.environ.get('FLASK_ENV') == 'production'
 app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.config['SESSION_COOKIE_SAMESITE'] = 'Strict'
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(hours=2)
 
-# CORS設定（本番環境では無効化）
-CORS(app, origins=['https://your-domain.com'])
+# CORS設定（本番環境対応）
+CORS(app, origins=['*'])  # 本番環境では適切なドメインに制限してください
 
 # セキュリティヘッダー設定
 Talisman(app, 
@@ -35,7 +36,7 @@ Talisman(app,
         'font-src': ["'self'", "https://cdnjs.cloudflare.com"],
         'img-src': ["'self'", "data:", "https:"],
     },
-    force_https=True
+    force_https=os.environ.get('FLASK_ENV') == 'production'
 )
 
 # レート制限設定
@@ -483,7 +484,21 @@ def get_sales_analysis():
 def static_files(filename):
     return send_from_directory('static', filename)
 
+# エラーハンドラー
+@app.errorhandler(404)
+def not_found(error):
+    return jsonify({'error': 'ページが見つかりません'}), 404
+
+@app.errorhandler(500)
+def internal_error(error):
+    return jsonify({'error': 'サーバー内部エラーが発生しました'}), 500
+
+@app.errorhandler(Exception)
+def handle_exception(e):
+    return jsonify({'error': f'予期しないエラーが発生しました: {str(e)}'}), 500
+
 if __name__ == '__main__':
     init_database()
     port = int(os.environ.get('PORT', 5000))
-    app.run(host='0.0.0.0', port=port, debug=False)
+    debug = os.environ.get('FLASK_DEBUG', 'false').lower() == 'true'
+    app.run(host='0.0.0.0', port=port, debug=debug)
