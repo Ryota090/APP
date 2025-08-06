@@ -3,7 +3,9 @@ let appData = {
     products: [],
     sales: [],
     user: null,
-    charts: {}
+    charts: {},
+    autoRefreshInterval: null,
+    autoRefreshEnabled: false
 };
 
 // ページ表示制御
@@ -549,6 +551,139 @@ async function registerSale(event) {
     } catch (error) {
         console.error('売上登録エラー:', error);
         alert('売上登録エラーが発生しました');
+    }
+}
+
+// 日付範囲設定
+function setDateRange(range) {
+    const today = new Date();
+    const startDate = document.getElementById('startDate');
+    const endDate = document.getElementById('endDate');
+    
+    switch(range) {
+        case 'today':
+            startDate.value = today.toISOString().split('T')[0];
+            endDate.value = today.toISOString().split('T')[0];
+            break;
+        case 'week':
+            const weekStart = new Date(today);
+            weekStart.setDate(today.getDate() - today.getDay());
+            startDate.value = weekStart.toISOString().split('T')[0];
+            endDate.value = today.toISOString().split('T')[0];
+            break;
+        case 'month':
+            const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+            startDate.value = monthStart.toISOString().split('T')[0];
+            endDate.value = today.toISOString().split('T')[0];
+            break;
+        case 'quarter':
+            const quarter = Math.floor(today.getMonth() / 3);
+            const quarterStart = new Date(today.getFullYear(), quarter * 3, 1);
+            startDate.value = quarterStart.toISOString().split('T')[0];
+            endDate.value = today.toISOString().split('T')[0];
+            break;
+        case 'year':
+            const yearStart = new Date(today.getFullYear(), 0, 1);
+            startDate.value = yearStart.toISOString().split('T')[0];
+            endDate.value = today.toISOString().split('T')[0];
+            break;
+    }
+    
+    // 自動的に分析を実行
+    updateAnalysis();
+}
+
+// 売上価格自動設定
+function updateSalesPrice() {
+    const productSelect = document.getElementById('salesProduct');
+    const priceInput = document.getElementById('salesPrice');
+    
+    if (productSelect.value) {
+        const selectedProduct = appData.products.find(p => p.id == productSelect.value);
+        if (selectedProduct) {
+            priceInput.value = selectedProduct.price;
+            calculateTotal();
+        }
+    }
+}
+
+// 合計金額計算
+function calculateTotal() {
+    const quantity = parseInt(document.getElementById('salesQuantity').value) || 0;
+    const price = parseInt(document.getElementById('salesPrice').value) || 0;
+    const total = quantity * price;
+    
+    document.getElementById('salesTotal').value = `¥${total.toLocaleString()}`;
+}
+
+// 自動更新切り替え
+function toggleAutoRefresh() {
+    const button = document.getElementById('autoRefreshText');
+    
+    if (appData.autoRefreshEnabled) {
+        // 自動更新を停止
+        if (appData.autoRefreshInterval) {
+            clearInterval(appData.autoRefreshInterval);
+            appData.autoRefreshInterval = null;
+        }
+        appData.autoRefreshEnabled = false;
+        button.textContent = '自動更新OFF';
+    } else {
+        // 自動更新を開始（30秒間隔）
+        appData.autoRefreshInterval = setInterval(updateDashboard, 30000);
+        appData.autoRefreshEnabled = true;
+        button.textContent = '自動更新ON';
+    }
+}
+
+// データエクスポート
+function exportData() {
+    const startDate = document.getElementById('startDate').value;
+    const endDate = document.getElementById('endDate').value;
+    
+    // CSVデータを作成
+    let csvContent = "日付,商品名,数量,単価,売上\n";
+    
+    // 実際のデータを取得してCSVに追加
+    fetch('/api/sales-analysis')
+        .then(response => response.json())
+        .then(data => {
+            data.sales_history.forEach(sale => {
+                csvContent += `${sale.date},${sale.product_name},${sale.quantity},${sale.price},${sale.total}\n`;
+            });
+            
+            // CSVファイルをダウンロード
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement('a');
+            link.href = URL.createObjectURL(blob);
+            link.download = `売上データ_${startDate}_${endDate}.csv`;
+            link.click();
+        });
+}
+
+// 商品エクスポート
+function exportProducts() {
+    let csvContent = "SKU,商品名,価格,在庫数\n";
+    
+    appData.products.forEach(product => {
+        csvContent += `${product.sku},${product.name},${product.price},${product.quantity}\n`;
+    });
+    
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    link.download = `商品一覧_${new Date().toISOString().split('T')[0]}.csv`;
+    link.click();
+}
+
+// 一括在庫更新
+function bulkUpdateStock() {
+    const newStock = prompt('一括で設定する在庫数を入力してください:');
+    if (newStock && !isNaN(newStock)) {
+        if (confirm(`すべての商品の在庫数を${newStock}に設定しますか？`)) {
+            // 実際の実装では、APIエンドポイントを作成して一括更新を行う
+            alert('一括在庫更新機能は現在開発中です');
+        }
     }
 }
 
