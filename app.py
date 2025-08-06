@@ -48,10 +48,19 @@ def init_database():
         
         # 初期データの挿入
         cursor.execute("SELECT COUNT(*) FROM users")
-        if cursor.fetchone()[0] == 0:
-            password_hash = bcrypt.hashpw("Admin@2024!".encode('utf-8'), bcrypt.gensalt())
+        user_count = cursor.fetchone()[0]
+        print(f"既存のユーザー数: {user_count}")
+        
+        if user_count == 0:
+            print("初期ユーザーを作成中...")
+            password = "Admin@2024!"
+            password_hash = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())
+            print(f"パスワード: {password}")
+            print(f"ハッシュ: {password_hash}")
+            
             cursor.execute("INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)", 
                           ("admin", password_hash, "admin"))
+            print("adminユーザーを作成しました")
             
             sample_products = [
                 ("TSH001", "ベーシックTシャツ", 2500, 50),
@@ -108,30 +117,50 @@ def login_api():
         username = data.get('username')
         password = data.get('password')
         
+        print(f"=== ログイン試行 ===")
+        print(f"ユーザー名: {username}")
+        print(f"パスワード: {password}")
+        
         if not username or not password:
             return jsonify({'success': False, 'message': 'ユーザー名とパスワードを入力してください'})
         
         db_path = os.environ.get('DATABASE_PATH', 'inventory.db')
+        print(f"データベースパス: {db_path}")
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
         
         cursor.execute("SELECT id, role, password_hash FROM users WHERE username = ?", (username,))
         user = cursor.fetchone()
         
-        if user and verify_password(password, user[2]):
-            session.permanent = True
-            session['user_id'] = user[0]
-            session['username'] = username
-            session['role'] = user[1]
+        if user:
+            print(f"ユーザーが見つかりました: {user[1]}")
+            print(f"DBパスワードハッシュ: {user[2]}")
             
-            conn.close()
-            return jsonify({'success': True, 'user': {'username': username, 'role': user[1]}})
+            password_valid = verify_password(password, user[2])
+            print(f"パスワード検証結果: {password_valid}")
+            
+            if password_valid:
+                session.permanent = True
+                session['user_id'] = user[0]
+                session['username'] = username
+                session['role'] = user[1]
+                
+                conn.close()
+                print("ログイン成功")
+                return jsonify({'success': True, 'user': {'username': username, 'role': user[1]}})
+            else:
+                conn.close()
+                print("パスワードが間違っています")
+                return jsonify({'success': False, 'message': 'パスワードが間違っています'})
         else:
             conn.close()
-            return jsonify({'success': False, 'message': 'ユーザー名またはパスワードが違います'})
+            print("ユーザーが見つかりません")
+            return jsonify({'success': False, 'message': 'ユーザーが見つかりません'})
             
     except Exception as e:
         print(f"ログインエラー: {e}")
+        import traceback
+        print(f"エラー詳細: {traceback.format_exc()}")
         return jsonify({'success': False, 'message': 'ログイン処理エラー'})
 
 @app.route('/api/logout', methods=['POST'])
@@ -142,9 +171,23 @@ def logout():
 @app.route('/api/init-db', methods=['POST'])
 def init_database_api():
     try:
+        print("=== データベース初期化API呼び出し ===")
         init_database()
-        return jsonify({'success': True, 'message': 'データベースが初期化されました'})
+        
+        # 初期化後の確認
+        db_path = os.environ.get('DATABASE_PATH', 'inventory.db')
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        cursor.execute("SELECT username, role FROM users")
+        users = cursor.fetchall()
+        conn.close()
+        
+        print(f"初期化後のユーザー: {users}")
+        return jsonify({'success': True, 'message': f'データベースが初期化されました。ユーザー: {users}'})
     except Exception as e:
+        print(f"データベース初期化APIエラー: {e}")
+        import traceback
+        print(f"エラー詳細: {traceback.format_exc()}")
         return jsonify({'success': False, 'message': f'エラー: {str(e)}'})
 
 @app.route('/api/dashboard')
@@ -194,6 +237,46 @@ def health():
 @app.route('/test')
 def test():
     return jsonify({'status': 'ok', 'message': 'テストエンドポイントが正常に動作しています'})
+
+@app.route('/api/check-db')
+def check_database():
+    try:
+        db_path = os.environ.get('DATABASE_PATH', 'inventory.db')
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        
+        # ユーザーテーブルの確認
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='users'")
+        users_table_exists = cursor.fetchone() is not None
+        
+        if users_table_exists:
+            cursor.execute("SELECT username, role FROM users")
+            users = cursor.fetchall()
+        else:
+            users = []
+        
+        # 商品テーブルの確認
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='products'")
+        products_table_exists = cursor.fetchone() is not None
+        
+        if products_table_exists:
+            cursor.execute("SELECT COUNT(*) FROM products")
+            product_count = cursor.fetchone()[0]
+        else:
+            product_count = 0
+        
+        conn.close()
+        
+        return jsonify({
+            'status': 'ok',
+            'database_path': db_path,
+            'users_table_exists': users_table_exists,
+            'products_table_exists': products_table_exists,
+            'users': users,
+            'product_count': product_count
+        })
+    except Exception as e:
+        return jsonify({'status': 'error', 'message': str(e)})
 
 @app.route('/static/<path:filename>')
 def static_files(filename):
