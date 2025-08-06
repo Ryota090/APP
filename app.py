@@ -16,11 +16,21 @@ app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(hours=2)
 # CORS設定
 CORS(app, origins=['*'])
 
+# アプリケーション起動時の初期化
+print("Flaskアプリケーション初期化中...")
+
 # データベース初期化
 def init_database():
     try:
         db_path = os.environ.get('DATABASE_PATH', 'inventory.db')
         print(f"データベースパス: {db_path}")
+        
+        # データベースディレクトリが存在しない場合は作成
+        db_dir = os.path.dirname(db_path)
+        if db_dir and not os.path.exists(db_dir):
+            os.makedirs(db_dir, exist_ok=True)
+            print(f"データベースディレクトリを作成: {db_dir}")
+        
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
     
@@ -417,6 +427,32 @@ def get_sales_analysis():
 def static_files(filename):
     return send_from_directory('static', filename)
 
+# エラーハンドラー
+@app.errorhandler(404)
+def not_found(error):
+    return jsonify({'error': 'ページが見つかりません'}), 404
+
+@app.errorhandler(500)
+def internal_error(error):
+    print(f"500エラー: {error}")
+    return jsonify({'error': 'サーバー内部エラーが発生しました'}), 500
+
+@app.errorhandler(Exception)
+def handle_exception(e):
+    print(f"予期しないエラー: {e}")
+    return jsonify({'error': f'予期しないエラーが発生しました: {str(e)}'}), 500
+
+# アプリケーション起動時のエラーハンドリング
+@app.before_first_request
+def before_first_request():
+    try:
+        print("初回リクエスト時の初期化処理開始")
+        init_database()
+        print("初回リクエスト時の初期化処理完了")
+    except Exception as e:
+        print(f"初回リクエスト時の初期化エラー: {e}")
+        # エラーが発生してもアプリケーションは継続
+
 if __name__ == '__main__':
     print("アプリケーション起動中...")
     try:
@@ -424,6 +460,7 @@ if __name__ == '__main__':
         print("データベース初期化完了")
     except Exception as e:
         print(f"データベース初期化エラー: {e}")
+        # エラーが発生してもアプリケーションは起動を続行
     
     port = int(os.environ.get('PORT', 5000))
     debug = os.environ.get('FLASK_DEBUG', 'false').lower() == 'true'
