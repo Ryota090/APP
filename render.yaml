@@ -14,4 +14,6 @@ services:
         value: "production"
       - key: FLASK_DEBUG
         value: "false"
+      - key: DATABASE_PATH
+        value: "/tmp/inventory.db"
     autoDeploy: true

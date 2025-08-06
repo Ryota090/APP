@@ -91,19 +91,19 @@
                     </div>
                     
                     <nav class="nav flex-column">
-                        <a class="nav-link active" href="#" onclick="showPage('dashboard')">
+                        <a class="nav-link active" href="#" onclick="showPage('dashboard', event)">
                             <i class="fas fa-chart-line me-2"></i>ダッシュボード
                         </a>
-                        <a class="nav-link" href="#" onclick="showPage('products')">
+                        <a class="nav-link" href="#" onclick="showPage('products', event)">
                             <i class="fas fa-box me-2"></i>商品管理
                         </a>
-                        <a class="nav-link" href="#" onclick="showPage('inventory')">
+                        <a class="nav-link" href="#" onclick="showPage('inventory', event)">
                             <i class="fas fa-warehouse me-2"></i>在庫管理
                         </a>
-                        <a class="nav-link" href="#" onclick="showPage('sales')">
+                        <a class="nav-link" href="#" onclick="showPage('sales', event)">
                             <i class="fas fa-cash-register me-2"></i>売上登録
                         </a>
-                        <a class="nav-link" href="#" onclick="showPage('analysis')">
+                        <a class="nav-link" href="#" onclick="showPage('analysis', event)">
                             <i class="fas fa-chart-bar me-2"></i>売上分析
                         </a>
                     </nav>
@@ -192,10 +192,10 @@
                     
                     <ul class="nav nav-tabs mb-4">
                         <li class="nav-item">
-                            <a class="nav-link active" href="#" onclick="showProductTab('list')">商品一覧</a>
+                            <a class="nav-link active" href="#" onclick="showProductTab('list', event)">商品一覧</a>
                         </li>
                         <li class="nav-item">
-                            <a class="nav-link" href="#" onclick="showProductTab('add')">新規商品登録</a>
+                            <a class="nav-link" href="#" onclick="showProductTab('add', event)">新規商品登録</a>
                         </li>
                     </ul>
 

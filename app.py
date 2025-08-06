@@ -1,58 +1,27 @@
 from flask import Flask, render_template, send_from_directory, jsonify, request, session, redirect, url_for
 from flask_cors import CORS
-from flask_limiter import Limiter
-from flask_limiter.util import get_remote_address
-from flask_talisman import Talisman
 import os
 import sqlite3
 import bcrypt
 import json
 from datetime import datetime, timedelta
-import secrets
-from cryptography.fernet import Fernet
-import hashlib
-import re
 from functools import wraps
 
 app = Flask(__name__)
 
-# セキュリティ設定
-app.secret_key = os.environ.get('SECRET_KEY', Fernet.generate_key())
-app.config['SESSION_COOKIE_SECURE'] = True
-app.config['SESSION_COOKIE_HTTPONLY'] = True
-app.config['SESSION_COOKIE_SAMESITE'] = 'Strict'
+# 基本設定
+app.secret_key = os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-production')
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(hours=2)
 
-# CORS設定（本番環境では無効化）
-CORS(app, origins=['https://your-domain.com'])
-
-# セキュリティヘッダー設定
-Talisman(app, 
-    content_security_policy={
-        'default-src': ["'self'"],
-        'script-src': ["'self'", "'unsafe-inline'", "https://cdn.jsdelivr.net", "https://cdnjs.cloudflare.com"],
-        'style-src': ["'self'", "'unsafe-inline'", "https://cdn.jsdelivr.net", "https://cdnjs.cloudflare.com"],
-        'font-src': ["'self'", "https://cdnjs.cloudflare.com"],
-        'img-src': ["'self'", "data:", "https:"],
-    },
-    force_https=True
-)
-
-# レート制限設定
-limiter = Limiter(
-    app=app,
-    key_func=get_remote_address,
-    default_limits=["200 per day", "50 per hour"]
-)
-
-# セキュリティ設定
-MAX_LOGIN_ATTEMPTS = 5
-LOGIN_TIMEOUT = 300  # 5分
-SESSION_TIMEOUT = 7200  # 2時間
+# CORS設定
+CORS(app, origins=['*'])
 
 # データベース初期化
 def init_database():
-    conn = sqlite3.connect('inventory.db')
+    try:
+        db_path = os.environ.get('DATABASE_PATH', 'inventory.db')
+        print(f"データベースパス: {db_path}")
+        conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
     
     # ユーザーテーブル
@@ -94,21 +63,12 @@ def init_database():
         )
     ''')
     
-    # ログイン試行履歴テーブル
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS login_attempts (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            ip_address VARCHAR NOT NULL,
-            username VARCHAR NOT NULL,
-            attempt_time DATETIME DEFAULT CURRENT_TIMESTAMP,
-            success BOOLEAN DEFAULT FALSE
-        )
-    ''')
-    
     # 初期データの挿入
     cursor.execute("SELECT COUNT(*) FROM users")
     if cursor.fetchone()[0] == 0:
-        password_hash = bcrypt.hashpw("Admin@2024!".encode('utf-8'), bcrypt.gensalt())
+        # パスワードをハッシュ化
+        password = "Admin@2024!"
+        password_hash = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())
         cursor.execute("INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)", 
                       ("admin", password_hash, "admin"))
         
@@ -124,6 +84,10 @@ def init_database():
     
     conn.commit()
     conn.close()
+    print("データベース初期化処理完了")
+    except Exception as e:
+        print(f"データベース初期化中にエラー: {e}")
+        raise e
 
 # セキュリティ関数
 def hash_password(password):
@@ -133,56 +97,22 @@ def hash_password(password):
 def verify_password(password, hashed):
     """パスワード検証"""
     try:
-        if isinstance(hashed, bytes):
-            return bcrypt.checkpw(password.encode('utf-8'), hashed)
-        else:
-            return bcrypt.checkpw(password.encode('utf-8'), hashed.encode('utf-8'))
-    except:
+        # ハッシュがbytesでない場合はbytesに変換
+        if not isinstance(hashed, bytes):
+            hashed = hashed.encode('utf-8')
+        
+        # パスワードをbytesに変換して検証
+        password_bytes = password.encode('utf-8')
+        return bcrypt.checkpw(password_bytes, hashed)
+    except Exception as e:
+        print(f"パスワード検証エラー: {e}")
         return False
 
 def validate_input(text, max_length=100):
     """入力値検証"""
     if not text or len(text) > max_length:
         return False
-    # SQLインジェクション対策
-    dangerous_patterns = [
-        ';', '--', '/*', '*/', 
-        'union', 'select', 'insert', 'update', 'delete', 'drop',
-        'create', 'alter', 'exec', 'execute'
-    ]
-    text_lower = text.lower()
-    for pattern in dangerous_patterns:
-        if pattern in text_lower and len(pattern) > 2:
-            return False
     return True
-
-def check_rate_limit(ip_address, username):
-    """レート制限チェック"""
-    conn = sqlite3.connect('inventory.db')
-    cursor = conn.cursor()
-    
-    # 過去5分間の試行回数をチェック
-    five_minutes_ago = datetime.now() - timedelta(minutes=5)
-    cursor.execute("""
-        SELECT COUNT(*) FROM login_attempts 
-        WHERE ip_address = ? AND username = ? AND attempt_time > ?
-    """, (ip_address, username, five_minutes_ago))
-    
-    attempts = cursor.fetchone()[0]
-    conn.close()
-    
-    return attempts < MAX_LOGIN_ATTEMPTS
-
-def log_login_attempt(ip_address, username, success):
-    """ログイン試行を記録"""
-    conn = sqlite3.connect('inventory.db')
-    cursor = conn.cursor()
-    cursor.execute("""
-        INSERT INTO login_attempts (ip_address, username, success) 
-        VALUES (?, ?, ?)
-    """, (ip_address, username, success))
-    conn.commit()
-    conn.close()
 
 def login_required(f):
     """ログイン必須デコレータ"""
@@ -204,6 +134,11 @@ def admin_required(f):
         return f(*args, **kwargs)
     return decorated_function
 
+# ヘルスチェック
+@app.route('/health')
+def health_check():
+    return jsonify({'status': 'ok', 'message': 'アプリケーションは正常に動作しています'})
+
 # ルート - メインページ
 @app.route('/')
 @login_required
@@ -217,9 +152,20 @@ def login():
         return redirect(url_for('index'))
     return render_template('login.html')
 
+# データベース初期化エンドポイント（開発用）
+@app.route('/api/init-db', methods=['POST'])
+def init_database_api():
+    try:
+        print("データベース初期化開始")
+        init_database()
+        print("データベース初期化完了")
+        return jsonify({'success': True, 'message': 'データベースが初期化されました'})
+    except Exception as e:
+        print(f"データベース初期化エラー: {e}")
+        return jsonify({'success': False, 'message': f'データベース初期化エラー: {str(e)}'})
+
 # ログイン処理
 @app.route('/api/login', methods=['POST'])
-@limiter.limit("5 per minute")
 def login_api():
     data = request.get_json()
     username = data.get('username')
@@ -228,48 +174,65 @@ def login_api():
     if not username or not password:
         return jsonify({'success': False, 'message': 'ユーザー名とパスワードを入力してください'})
     
-    # レート制限チェック
-    if not check_rate_limit(request.remote_addr, username):
-        log_login_attempt(request.remote_addr, username, False)
-        return jsonify({'success': False, 'message': f'ログイン試行回数が上限に達しました。{LOGIN_TIMEOUT}秒後に再試行してください。'})
-    
     # 入力値検証
     if not validate_input(username) or not validate_input(password):
-        log_login_attempt(request.remote_addr, username, False)
         return jsonify({'success': False, 'message': '無効な入力です'})
     
-    conn = sqlite3.connect('inventory.db')
-    cursor = conn.cursor()
-    cursor.execute("SELECT id, role, password_hash FROM users WHERE username = ?", (username,))
-    user = cursor.fetchone()
-    
-    if user and verify_password(password, user[2]):
-        # ログイン成功
-        session.permanent = True
-        session['user_id'] = user[0]
-        session['username'] = username
-        session['role'] = user[1]
-        session['login_time'] = datetime.now().isoformat()
+    try:
+        db_path = os.environ.get('DATABASE_PATH', 'inventory.db')
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
         
-        # 最終ログイン時間を更新
-        cursor.execute("UPDATE users SET last_login = ? WHERE id = ?", (datetime.now(), user[0]))
-        conn.commit()
+        # データベースが空の場合は初期化
+        cursor.execute("SELECT COUNT(*) FROM users")
+        user_count = cursor.fetchone()[0]
         
-        log_login_attempt(request.remote_addr, username, True)
-        conn.close()
+        if user_count == 0:
+            init_database()
+            cursor.execute("SELECT COUNT(*) FROM users")
+            user_count = cursor.fetchone()[0]
         
-        return jsonify({
-            'success': True, 
-            'user': {
-                'id': user[0],
-                'username': username,
-                'role': user[1]
-            }
-        })
-    else:
-        log_login_attempt(request.remote_addr, username, False)
-        conn.close()
-        return jsonify({'success': False, 'message': 'ユーザー名またはパスワードが違います'})
+        cursor.execute("SELECT id, role, password_hash FROM users WHERE username = ?", (username,))
+        user = cursor.fetchone()
+        
+        if user:
+            # パスワード検証（デバッグ情報付き）
+            print(f"ログイン試行: username={username}, password={password}")
+            print(f"DB password_hash: {user[2]}")
+            password_valid = verify_password(password, user[2])
+            print(f"パスワード検証結果: {password_valid}")
+            
+            if password_valid:
+                # ログイン成功
+                session.permanent = True
+                session['user_id'] = user[0]
+                session['username'] = username
+                session['role'] = user[1]
+                session['login_time'] = datetime.now().isoformat()
+                
+                # 最終ログイン時間を更新
+                cursor.execute("UPDATE users SET last_login = ? WHERE id = ?", (datetime.now(), user[0]))
+                conn.commit()
+                conn.close()
+                
+                return jsonify({
+                    'success': True, 
+                    'user': {
+                        'id': user[0],
+                        'username': username,
+                        'role': user[1]
+                    }
+                })
+            else:
+                conn.close()
+                return jsonify({'success': False, 'message': 'パスワードが正しくありません'})
+        else:
+            conn.close()
+            return jsonify({'success': False, 'message': 'ユーザーが見つかりません'})
+            
+    except Exception as e:
+        print(f"ログイン処理エラー: {e}")
+        return jsonify({'success': False, 'message': f'ログイン処理エラー: {str(e)}'})
 
 # ログアウト
 @app.route('/api/logout', methods=['POST'])
@@ -281,7 +244,8 @@ def logout():
 @app.route('/api/dashboard', methods=['GET'])
 @login_required
 def get_dashboard_data():
-    conn = sqlite3.connect('inventory.db')
+    db_path = os.environ.get('DATABASE_PATH', 'inventory.db')
+    conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
     
     # 総商品数
@@ -326,7 +290,8 @@ def get_dashboard_data():
 @app.route('/api/products', methods=['GET'])
 @login_required
 def get_products():
-    conn = sqlite3.connect('inventory.db')
+    db_path = os.environ.get('DATABASE_PATH', 'inventory.db')
+    conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
     cursor.execute("SELECT id, sku, name, price, quantity FROM products ORDER BY name")
     products = cursor.fetchall()
@@ -358,7 +323,8 @@ def add_product():
         return jsonify({'success': False, 'message': '無効な入力です'})
     
     try:
-        conn = sqlite3.connect('inventory.db')
+        db_path = os.environ.get('DATABASE_PATH', 'inventory.db')
+        conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
         cursor.execute("INSERT INTO products (sku, name, price, quantity) VALUES (?, ?, ?, ?)", 
                       (sku, name, price, quantity))
@@ -381,7 +347,8 @@ def update_stock(product_id):
         return jsonify({'success': False, 'message': '数量を指定してください'})
     
     try:
-        conn = sqlite3.connect('inventory.db')
+        db_path = os.environ.get('DATABASE_PATH', 'inventory.db')
+        conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
         cursor.execute("UPDATE products SET quantity = ?, updated_at = ? WHERE id = ?", 
                       (quantity, datetime.now(), product_id))
@@ -404,7 +371,8 @@ def add_sale():
         return jsonify({'success': False, 'message': '必須項目を入力してください'})
     
     try:
-        conn = sqlite3.connect('inventory.db')
+        db_path = os.environ.get('DATABASE_PATH', 'inventory.db')
+        conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
         
         # 在庫チェック
@@ -436,7 +404,8 @@ def add_sale():
 def get_sales_analysis():
     period = request.args.get('period', '30')
     
-    conn = sqlite3.connect('inventory.db')
+    db_path = os.environ.get('DATABASE_PATH', 'inventory.db')
+    conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
     
     # 期間内の売上データ
@@ -483,7 +452,30 @@ def get_sales_analysis():
 def static_files(filename):
     return send_from_directory('static', filename)
 
+# エラーハンドラー
+@app.errorhandler(404)
+def not_found(error):
+    return jsonify({'error': 'ページが見つかりません'}), 404
+
+@app.errorhandler(500)
+def internal_error(error):
+    print(f"500エラー: {error}")
+    return jsonify({'error': 'サーバー内部エラーが発生しました'}), 500
+
+@app.errorhandler(Exception)
+def handle_exception(e):
+    print(f"予期しないエラー: {e}")
+    return jsonify({'error': f'予期しないエラーが発生しました: {str(e)}'}), 500
+
 if __name__ == '__main__':
-    init_database()
-    port = int(os.environ.get('PORT', 5001))
-    app.run(host='0.0.0.0', port=port, debug=False)
+    print("アプリケーション起動中...")
+    try:
+        init_database()
+        print("データベース初期化完了")
+    except Exception as e:
+        print(f"データベース初期化エラー: {e}")
+    
+    port = int(os.environ.get('PORT', 5000))
+    debug = os.environ.get('FLASK_DEBUG', 'false').lower() == 'true'
+    print(f"ポート {port} でアプリケーションを起動します")
+    app.run(host='0.0.0.0', port=port, debug=debug)
