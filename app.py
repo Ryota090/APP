@@ -86,13 +86,17 @@ def init_database():
                           ("admin", password_hash, "admin"))
             print("adminユーザーを作成しました")
             
+            # サンプル商品データ（レポートの要件に合わせて）
             sample_products = [
                 ("TSH001", "ベーシックTシャツ", 2500, 50),
                 ("JKT002", "デニムジャケット", 8500, 20),
-                ("PTS003", "スキニーパンツ", 4500, 30)
+                ("PTS003", "スキニーパンツ", 4500, 30),
+                ("SWT004", "カジュアルスウェット", 3500, 25),
+                ("SHO005", "スニーカー", 12000, 15)
             ]
             cursor.executemany("INSERT INTO products (sku, name, price, quantity) VALUES (?, ?, ?, ?)", 
                               sample_products)
+            print(f"{len(sample_products)}個のサンプル商品を追加しました")
         
         conn.commit()
         conn.close()

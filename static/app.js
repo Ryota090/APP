@@ -75,7 +75,7 @@ async function updateDashboard() {
         }
         const data = await response.json();
         
-        // メトリクス更新
+        // KPI更新
         const totalProductsEl = document.getElementById('totalProducts');
         const totalStockEl = document.getElementById('totalStock');
         const lowStockCountEl = document.getElementById('lowStockCount');
@@ -98,6 +98,9 @@ async function updateDashboard() {
         
         // 売上チャート更新
         updateSalesChart(data.sales_data || []);
+        
+        // 在庫僅少商品テーブル更新
+        updateLowStockTable();
         
     } catch (error) {
         console.error('ダッシュボード更新エラー:', error);
@@ -150,6 +153,7 @@ function updateInventoryPage() {
 // 売上管理ページ更新
 function updateSalesPage() {
     updateProductSelects();
+    updateSalesHistory();
 }
 
 // 分析ページ更新
@@ -162,10 +166,11 @@ async function updateAnalysisPage() {
         const data = await response.json();
         
         // 分析チャート更新
-        updateAnalysisChart(data.chart_data || []);
+        updateMonthlySalesChart(data.chart_data || []);
+        updateProductSalesChart(data.chart_data || []);
         
-        // 売上履歴テーブル更新
-        updateSalesTable(data.sales_history || []);
+        // 分析テーブル更新
+        updateAnalysisTable(data.sales_history || []);
         
     } catch (error) {
         console.error('分析ページ更新エラー:', error);
@@ -231,20 +236,61 @@ function updateSalesChart(salesData) {
     });
 }
 
-// 分析チャート更新
-function updateAnalysisChart(chartData) {
-    const ctx = document.getElementById('analysisChart');
+// 月別売上チャート更新
+function updateMonthlySalesChart(chartData) {
+    const ctx = document.getElementById('monthlySalesChart');
     if (!ctx) return;
     
     // 既存のチャートを破棄
-    if (appData.charts.analysisChart) {
-        appData.charts.analysisChart.destroy();
+    if (appData.charts.monthlySalesChart) {
+        appData.charts.monthlySalesChart.destroy();
     }
     
     const labels = chartData.map(item => item.product || '');
     const data = chartData.map(item => item.sales || 0);
     
-    appData.charts.analysisChart = new Chart(ctx, {
+    appData.charts.monthlySalesChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: '月別売上',
+                data: data,
+                borderColor: '#667eea',
+                backgroundColor: 'rgba(102, 126, 234, 0.1)',
+                tension: 0.4
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                legend: {
+                    position: 'top',
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true
+                }
+            }
+        }
+    });
+}
+
+// 商品別売上チャート更新
+function updateProductSalesChart(chartData) {
+    const ctx = document.getElementById('productSalesChart');
+    if (!ctx) return;
+    
+    // 既存のチャートを破棄
+    if (appData.charts.productSalesChart) {
+        appData.charts.productSalesChart.destroy();
+    }
+    
+    const labels = chartData.map(item => item.product || '');
+    const data = chartData.map(item => item.sales || 0);
+    
+    appData.charts.productSalesChart = new Chart(ctx, {
         type: 'bar',
         data: {
             labels: labels,
@@ -272,9 +318,72 @@ function updateAnalysisChart(chartData) {
     });
 }
 
-// 売上履歴テーブル更新
-function updateSalesTable(salesHistory) {
-    const tbody = document.getElementById('salesTableBody');
+// 在庫僅少商品テーブル更新
+async function updateLowStockTable() {
+    try {
+        const response = await fetch('/api/products');
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        const products = await response.json();
+        
+        const lowStockProducts = products.filter(product => product.quantity < 10);
+        const lowStockTable = document.getElementById('lowStockTable');
+        
+        if (lowStockTable) {
+            if (lowStockProducts.length === 0) {
+                lowStockTable.innerHTML = '<p class="text-muted">在庫不足の商品はありません</p>';
+            } else {
+                let tableHTML = '<table class="table table-sm">';
+                tableHTML += '<thead><tr><th>商品名</th><th>在庫数</th></tr></thead><tbody>';
+                
+                lowStockProducts.forEach(product => {
+                    tableHTML += `<tr><td>${product.name}</td><td>${product.quantity}点</td></tr>`;
+                });
+                
+                tableHTML += '</tbody></table>';
+                lowStockTable.innerHTML = tableHTML;
+            }
+        }
+    } catch (error) {
+        console.error('在庫僅少商品テーブル更新エラー:', error);
+    }
+}
+
+// 売上履歴更新
+async function updateSalesHistory() {
+    try {
+        const response = await fetch('/api/sales-analysis');
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        const data = await response.json();
+        
+        const tbody = document.getElementById('salesHistoryTable');
+        if (tbody) {
+            tbody.innerHTML = '';
+            
+            const salesHistory = data.sales_history || [];
+            salesHistory.forEach(sale => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${sale.date || ''}</td>
+                    <td>${sale.product_name || ''}</td>
+                    <td>${sale.quantity || 0}</td>
+                    <td>¥${(sale.price || 0).toLocaleString()}</td>
+                    <td>¥${(sale.total || 0).toLocaleString()}</td>
+                `;
+                tbody.appendChild(row);
+            });
+        }
+    } catch (error) {
+        console.error('売上履歴更新エラー:', error);
+    }
+}
+
+// 分析テーブル更新
+function updateAnalysisTable(salesHistory) {
+    const tbody = document.getElementById('analysisTableBody');
     if (!tbody) return;
     
     tbody.innerHTML = '';
@@ -318,12 +427,12 @@ async function addProduct(event) {
         
         const result = await response.json();
         if (result.success) {
-            alert('商品が追加されました');
+            alert('商品が登録されました');
             document.getElementById('addProductForm').reset();
             updateProductList();
             updateDashboard();
         } else {
-            alert('商品追加に失敗しました: ' + result.message);
+            alert('商品登録に失敗しました: ' + result.message);
         }
     } catch (error) {
         console.error('商品追加エラー:', error);
@@ -433,12 +542,43 @@ async function registerSale(event) {
             alert('売上が登録されました');
             document.getElementById('salesForm').reset();
             updateDashboard();
+            updateSalesHistory();
         } else {
             alert('売上登録に失敗しました: ' + result.message);
         }
     } catch (error) {
         console.error('売上登録エラー:', error);
         alert('売上登録エラーが発生しました');
+    }
+}
+
+// 分析更新
+async function updateAnalysis() {
+    const startDate = document.getElementById('startDate').value;
+    const endDate = document.getElementById('endDate').value;
+    
+    try {
+        let url = '/api/sales-analysis';
+        if (startDate && endDate) {
+            url += `?start_date=${startDate}&end_date=${endDate}`;
+        }
+        
+        const response = await fetch(url);
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        const data = await response.json();
+        
+        // 分析チャート更新
+        updateMonthlySalesChart(data.chart_data || []);
+        updateProductSalesChart(data.chart_data || []);
+        
+        // 分析テーブル更新
+        updateAnalysisTable(data.sales_history || []);
+        
+    } catch (error) {
+        console.error('分析更新エラー:', error);
+        alert('分析更新エラーが発生しました');
     }
 }
 

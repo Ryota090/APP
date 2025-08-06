@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>アパレル在庫管理システム</title>
+    <title>在庫・売上管理Webアプリケーション</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -97,6 +97,20 @@
             box-shadow: 0 4px 20px rgba(0,0,0,0.1);
             margin-bottom: 20px;
         }
+        .kpi-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+        .sales-item {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 15px;
+            margin-bottom: 10px;
+            border-left: 4px solid #667eea;
+        }
     </style>
 </head>
 <body>
@@ -106,7 +120,7 @@
             <div class="col-md-3 col-lg-2 sidebar p-0">
                 <div class="p-3">
                     <h4 class="text-white mb-4">
-                        <i class="fas fa-tshirt me-2"></i>在庫管理
+                        <i class="fas fa-tshirt me-2"></i>在庫・売上管理
                     </h4>
                     
                     <div class="user-info">
@@ -125,7 +139,7 @@
                             <i class="fas fa-warehouse me-2"></i>在庫管理
                         </a>
                         <a class="nav-link" href="#" onclick="showPage('sales', event)">
-                            <i class="fas fa-shopping-cart me-2"></i>売上管理
+                            <i class="fas fa-shopping-cart me-2"></i>売上登録
                         </a>
                         <a class="nav-link" href="#" onclick="showPage('analysis', event)">
                             <i class="fas fa-chart-bar me-2"></i>売上分析
@@ -145,11 +159,11 @@
                 <div id="dashboardPage">
                     <h2 class="mb-4"><i class="fas fa-chart-line me-2"></i>ダッシュボード</h2>
                     
-                    <!-- 基本統計 -->
+                    <!-- KPI カード -->
                     <div class="row mb-4">
                         <div class="col-md-3 mb-3">
-                            <div class="card metric-card">
-                                <div class="card-body text-center">
+                            <div class="kpi-card">
+                                <div class="text-center">
                                     <i class="fas fa-box fa-2x mb-2"></i>
                                     <h4 id="totalProducts">0</h4>
                                     <p class="mb-0">総商品数</p>
@@ -157,8 +171,8 @@
                             </div>
                         </div>
                         <div class="col-md-3 mb-3">
-                            <div class="card metric-card">
-                                <div class="card-body text-center">
+                            <div class="kpi-card">
+                                <div class="text-center">
                                     <i class="fas fa-warehouse fa-2x mb-2"></i>
                                     <h4 id="totalStock">0</h4>
                                     <p class="mb-0">総在庫数</p>
@@ -166,8 +180,8 @@
                             </div>
                         </div>
                         <div class="col-md-3 mb-3">
-                            <div class="card metric-card">
-                                <div class="card-body text-center">
+                            <div class="kpi-card">
+                                <div class="text-center">
                                     <i class="fas fa-exclamation-triangle fa-2x mb-2"></i>
                                     <h4 id="lowStockCount">0</h4>
                                     <p class="mb-0">在庫不足</p>
@@ -175,8 +189,8 @@
                             </div>
                         </div>
                         <div class="col-md-3 mb-3">
-                            <div class="card metric-card">
-                                <div class="card-body text-center">
+                            <div class="kpi-card">
+                                <div class="text-center">
                                     <i class="fas fa-yen-sign fa-2x mb-2"></i>
                                     <h4 id="totalSales">¥0</h4>
                                     <p class="mb-0">総売上</p>
@@ -191,10 +205,20 @@
                         <strong>在庫不足警告:</strong> 一部の商品の在庫が不足しています。
                     </div>
 
-                    <!-- 売上チャート -->
-                    <div class="chart-container">
-                        <h5 class="mb-3">売上推移</h5>
-                        <canvas id="salesChart" width="400" height="200"></canvas>
+                    <!-- 売上速報 -->
+                    <div class="row mb-4">
+                        <div class="col-md-6">
+                            <div class="chart-container">
+                                <h5 class="mb-3">売上推移（過去7日間）</h5>
+                                <canvas id="salesChart" width="400" height="200"></canvas>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="table-container">
+                                <h5 class="mb-3">在庫僅少商品</h5>
+                                <div id="lowStockTable"></div>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
@@ -204,7 +228,7 @@
                     
                     <!-- 商品追加フォーム -->
                     <div class="form-container">
-                        <h5 class="mb-3">新商品追加</h5>
+                        <h5 class="mb-3">新規商品登録</h5>
                         <form id="addProductForm">
                             <div class="row">
                                 <div class="col-md-3 mb-3">
@@ -226,7 +250,7 @@
                                 <div class="col-md-2 mb-3">
                                     <label class="form-label">&nbsp;</label>
                                     <button type="submit" class="btn btn-primary w-100">
-                                        <i class="fas fa-plus me-2"></i>追加
+                                        <i class="fas fa-plus me-2"></i>登録
                                     </button>
                                 </div>
                             </div>
@@ -235,6 +259,7 @@
                     
                     <!-- 商品一覧 -->
                     <div class="table-container">
+                        <h5 class="mb-3">商品一覧</h5>
                         <table class="table table-hover">
                             <thead>
                                 <tr>
@@ -317,9 +342,9 @@
                     </div>
                 </div>
 
-                <!-- 売上管理 -->
+                <!-- 売上登録 -->
                 <div id="salesPage" class="hidden">
-                    <h2 class="mb-4"><i class="fas fa-shopping-cart me-2"></i>売上管理</h2>
+                    <h2 class="mb-4"><i class="fas fa-shopping-cart me-2"></i>売上登録</h2>
                     
                     <!-- 売上登録フォーム -->
                     <div class="form-container">
@@ -347,21 +372,69 @@
                             </div>
                         </form>
                     </div>
+
+                    <!-- 売上履歴 -->
+                    <div class="table-container">
+                        <h5 class="mb-3">売上履歴</h5>
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>日時</th>
+                                    <th>商品名</th>
+                                    <th>数量</th>
+                                    <th>単価</th>
+                                    <th>売上</th>
+                                </tr>
+                            </thead>
+                            <tbody id="salesHistoryTable"></tbody>
+                        </table>
+                    </div>
                 </div>
 
                 <!-- 売上分析 -->
                 <div id="analysisPage" class="hidden">
                     <h2 class="mb-4"><i class="fas fa-chart-bar me-2"></i>売上分析</h2>
                     
+                    <!-- 期間フィルター -->
+                    <div class="form-container">
+                        <h5 class="mb-3">期間フィルター</h5>
+                        <div class="row">
+                            <div class="col-md-3 mb-3">
+                                <label class="form-label">開始日</label>
+                                <input type="date" class="form-control" id="startDate">
+                            </div>
+                            <div class="col-md-3 mb-3">
+                                <label class="form-label">終了日</label>
+                                <input type="date" class="form-control" id="endDate">
+                            </div>
+                            <div class="col-md-3 mb-3">
+                                <label class="form-label">&nbsp;</label>
+                                <button type="button" class="btn btn-primary w-100" onclick="updateAnalysis()">
+                                    <i class="fas fa-search me-2"></i>分析実行
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    
                     <!-- 売上チャート -->
-                    <div class="chart-container">
-                        <h5 class="mb-3">売上推移</h5>
-                        <canvas id="analysisChart" width="400" height="200"></canvas>
+                    <div class="row mb-4">
+                        <div class="col-md-6">
+                            <div class="chart-container">
+                                <h5 class="mb-3">月別売上推移</h5>
+                                <canvas id="monthlySalesChart" width="400" height="200"></canvas>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="chart-container">
+                                <h5 class="mb-3">商品別売上ランキング</h5>
+                                <canvas id="productSalesChart" width="400" height="200"></canvas>
+                            </div>
+                        </div>
                     </div>
                     
                     <!-- 売上データテーブル -->
                     <div class="table-container">
-                        <h5 class="mb-3">売上履歴</h5>
+                        <h5 class="mb-3">売上分析結果</h5>
                         <table class="table table-hover">
                             <thead>
                                 <tr>
@@ -372,7 +445,7 @@
                                     <th>売上</th>
                                 </tr>
                             </thead>
-                            <tbody id="salesTableBody"></tbody>
+                            <tbody id="analysisTableBody"></tbody>
                         </table>
                     </div>
                 </div>
