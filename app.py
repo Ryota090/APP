@@ -84,10 +84,17 @@ def init_database():
         conn.close()
         print("=== データベース初期化完了 ===")
         
+        # 初期化後の確認
+        if os.path.exists(db_path):
+            print(f"データベースファイルが正常に作成されました: {db_path}")
+        else:
+            print(f"警告: データベースファイルが作成されませんでした: {db_path}")
+        
     except Exception as e:
         print(f"=== データベース初期化エラー: {e} ===")
         import traceback
         print(f"エラー詳細: {traceback.format_exc()}")
+        raise e  # エラーを再発生させる
 
 # パスワード検証
 def verify_password(password, hashed):
@@ -140,7 +147,17 @@ def login_api():
         else:
             db_path = os.environ.get('DATABASE_PATH', 'inventory.db')
         print(f"データベースパス: {db_path}")
-        conn = sqlite3.connect(db_path)
+        
+        # データベースファイルの存在確認
+        if not os.path.exists(db_path):
+            print(f"データベースファイルが存在しません: {db_path}")
+            return jsonify({'success': False, 'message': 'データベースが初期化されていません。データベース初期化ボタンをクリックしてください。'})
+        
+        try:
+            conn = sqlite3.connect(db_path)
+        except Exception as db_error:
+            print(f"データベース接続エラー: {db_error}")
+            return jsonify({'success': False, 'message': f'データベース接続エラー: {str(db_error)}'})
         cursor = conn.cursor()
         
         cursor.execute("SELECT id, role, password_hash FROM users WHERE username = ?", (username,))
@@ -175,7 +192,7 @@ def login_api():
         print(f"ログインエラー: {e}")
         import traceback
         print(f"エラー詳細: {traceback.format_exc()}")
-        return jsonify({'success': False, 'message': 'ログイン処理エラー'})
+        return jsonify({'success': False, 'message': f'ログイン処理エラー: {str(e)}'})
 
 @app.route('/api/logout', methods=['POST'])
 def logout():
@@ -193,7 +210,18 @@ def init_database_api():
             db_path = '/tmp/inventory.db'
         else:
             db_path = os.environ.get('DATABASE_PATH', 'inventory.db')
-        conn = sqlite3.connect(db_path)
+        
+        print(f"初期化後のデータベースパス確認: {db_path}")
+        
+        if not os.path.exists(db_path):
+            print(f"初期化後もデータベースファイルが存在しません: {db_path}")
+            return jsonify({'success': False, 'message': 'データベース初期化に失敗しました。ファイルが作成されませんでした。'})
+        
+        try:
+            conn = sqlite3.connect(db_path)
+        except Exception as db_error:
+            print(f"初期化後のデータベース接続エラー: {db_error}")
+            return jsonify({'success': False, 'message': f'初期化後のデータベース接続エラー: {str(db_error)}'})
         cursor = conn.cursor()
         cursor.execute("SELECT username, role FROM users")
         users = cursor.fetchall()
