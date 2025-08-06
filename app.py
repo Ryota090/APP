@@ -1,4 +1,4 @@
-from flask import Flask, render_template, jsonify, request, session, redirect, url_for
+from flask import Flask, render_template, jsonify, request, session, redirect, url_for, send_from_directory
 import os
 import sqlite3
 import bcrypt
@@ -194,6 +194,10 @@ def health():
 @app.route('/test')
 def test():
     return jsonify({'status': 'ok', 'message': 'テストエンドポイントが正常に動作しています'})
+
+@app.route('/static/<path:filename>')
+def static_files(filename):
+    return send_from_directory('static', filename)
 
 if __name__ == '__main__':
     print("=== アプリケーション起動開始 ===")
