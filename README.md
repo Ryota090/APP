@@ -5,12 +5,9 @@ Flaskを使用したセキュアなWebベースのアパレル在庫管理シス
 ## 🔒 セキュリティ機能
 
 * **強力なパスワードハッシュ化**: bcryptを使用
-* **レート制限**: ブルートフォース攻撃対策（5分間に5回まで）
-* **SQLインジェクション対策**: 入力値検証とプリペアドステートメント
+* **入力値検証**: SQLインジェクション対策
 * **セッション管理**: 安全なセッション処理（2時間で自動ログアウト）
-* **セキュリティヘッダー**: CSP、HTTPS強制、XSS対策
-* **CSRF保護**: セッションベースの保護
-* **ログイン試行記録**: IPアドレスとユーザー名による追跡
+* **CORS設定**: クロスオリジンリクエスト制御
 
 ## 機能
 
@@ -27,7 +24,7 @@ Flaskを使用したセキュアなWebベースのアパレル在庫管理シス
 * **バックエンド**: Flask (Python)
 * **データベース**: SQLite
 * **データ可視化**: Chart.js
-* **セキュリティ**: Flask-Talisman, Flask-Limiter, bcrypt
+* **セキュリティ**: bcrypt
 * **デプロイ**: Render, Gunicorn
 
 ## ローカル開発
@@ -64,26 +61,32 @@ python app.py
 
 ## Renderでのデプロイ
 
-### 手順
+### 自動デプロイ（推奨）
 
-1. Render にアカウントを作成
+`render.yaml`ファイルが設定されているため、GitHubにプッシュすると自動的にデプロイされます。
+
+### 手動デプロイ
+
+1. [Render](https://render.com) にアカウントを作成
 2. GitHubリポジトリをRenderに接続  
    * Renderダッシュボードで「New +」→「Web Service」を選択  
-   * GitHubリポジトリを選択
+   * GitHubリポジトリ `https://github.com/Ryota090/APP.git` を選択
 3. 設定  
    * **Name**: apparel-inventory-app  
    * **Environment**: Python  
    * **Build Command**: `pip install -r requirements.txt`  
-   * **Start Command**: `gunicorn app:app --bind 0.0.0.0:$PORT`
-4. 環境変数（自動設定）  
+   * **Start Command**: `gunicorn app:app --bind 0.0.0.0:$PORT --timeout 120`
+4. 環境変数  
    * `PYTHON_VERSION`: 3.11.8  
    * `SECRET_KEY`: 自動生成
    * `FLASK_ENV`: production
+   * `DATABASE_PATH`: /tmp/inventory.db
 5. 「Create Web Service」をクリック
 
-### 自動デプロイ
+### デプロイ後の確認
 
-`render.yaml`ファイルが設定されているため、GitHubにプッシュすると自動的にデプロイされます。
+* ヘルスチェック: `https://your-app-name.onrender.com/health`
+* ログインページ: `https://your-app-name.onrender.com/login`
 
 ## ファイル構成
 
