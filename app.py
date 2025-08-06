@@ -291,7 +291,7 @@ def static_files(filename):
 if __name__ == '__main__':
     print("=== アプリケーション起動開始 ===")
     try:
-    init_database()
+        init_database()
     except Exception as e:
         print(f"起動時のデータベース初期化エラー: {e}")
     
