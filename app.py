@@ -4,8 +4,20 @@ import sqlite3
 import plotly.express as px
 import plotly.graph_objects as go
 from datetime import datetime, date, timedelta
-import hashlib
+import bcrypt
 import os
+import re
+import time
+from cryptography.fernet import Fernet
+import secrets
+
+# --- セキュリティ設定 ---
+SECRET_KEY = os.environ.get('SECRET_KEY', Fernet.generate_key())
+cipher_suite = Fernet(SECRET_KEY)
+
+# --- レート制限設定 ---
+MAX_LOGIN_ATTEMPTS = 5
+LOGIN_TIMEOUT = 300  # 5分
 
 # --- アプリケーションの設定 ---
 st.set_page_config(
@@ -13,6 +25,36 @@ st.set_page_config(
     page_icon="👕",
     layout="wide"
 )
+
+# --- セキュリティ関数 ---
+def hash_password(password):
+    """強力なパスワードハッシュ化"""
+    return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())
+
+def verify_password(password, hashed):
+    """パスワード検証"""
+    return bcrypt.checkpw(password.encode('utf-8'), hashed)
+
+def validate_input(text, max_length=100):
+    """入力値検証"""
+    if not text or len(text) > max_length:
+        return False
+    # SQLインジェクション対策
+    dangerous_chars = [';', '--', '/*', '*/', 'union', 'select', 'insert', 'update', 'delete', 'drop']
+    text_lower = text.lower()
+    return not any(char in text_lower for char in dangerous_chars)
+
+def check_rate_limit():
+    """レート制限チェック"""
+    if 'login_attempts' not in st.session_state:
+        st.session_state.login_attempts = 0
+        st.session_state.last_attempt_time = 0
+    
+    current_time = time.time()
+    if current_time - st.session_state.last_attempt_time > LOGIN_TIMEOUT:
+        st.session_state.login_attempts = 0
+    
+    return st.session_state.login_attempts < MAX_LOGIN_ATTEMPTS
 
 # --- データベース初期化 ---
 def init_database():
@@ -47,7 +89,8 @@ def init_database():
     ''')
     cursor.execute("SELECT COUNT(*) FROM users")
     if cursor.fetchone()[0] == 0:
-        password_hash = hashlib.sha256("admin123".encode()).hexdigest()
+        # 強力なパスワードハッシュ化
+        password_hash = hash_password("Admin@2024!")
         cursor.execute("INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)", 
                       ("admin", password_hash, "admin"))
         sample_products = [
@@ -64,20 +107,45 @@ def init_database():
 
 # --- 認証機能 ---
 def login_user(username, password):
+    # レート制限チェック
+    if not check_rate_limit():
+        st.error(f"ログイン試行回数が上限に達しました。{LOGIN_TIMEOUT}秒後に再試行してください。")
+        return None
+    
+    # 入力値検証
+    if not validate_input(username) or not validate_input(password):
+        st.error("無効な入力です。")
+        st.session_state.login_attempts += 1
+        st.session_state.last_attempt_time = time.time()
+        return None
+    
     conn = sqlite3.connect('inventory.db')
     cursor = conn.cursor()
-    password_hash = hashlib.sha256(password.encode()).hexdigest()
-    cursor.execute("SELECT id, role FROM users WHERE username = ? AND password_hash = ?", 
-                  (username, password_hash))
+    cursor.execute("SELECT id, role, password_hash FROM users WHERE username = ?", (username,))
     user = cursor.fetchone()
     conn.close()
-    return user
+    
+    if user and verify_password(password, user[2]):
+        st.session_state.login_attempts = 0
+        return (user[0], user[1])
+    else:
+        st.session_state.login_attempts += 1
+        st.session_state.last_attempt_time = time.time()
+        return None
 
 def signup_user(username, password, role="staff"):
     """新規ユーザー登録（管理者専用）"""
+    # 入力値検証
+    if not validate_input(username) or not validate_input(password):
+        return False
+    
+    # パスワード強度チェック
+    if len(password) < 8:
+        return False
+    
     conn = sqlite3.connect('inventory.db')
     cursor = conn.cursor()
-    password_hash = hashlib.sha256(password.encode()).hexdigest()
+    password_hash = hash_password(password)
     try:
         cursor.execute("INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)", (username, password_hash, role))
         conn.commit()
@@ -98,19 +166,34 @@ def main():
     init_database()
 
     if not check_auth():
+        st.markdown("""
+        <div style="background-color: #f0f2f6; padding: 20px; border-radius: 10px; border-left: 4px solid #ff4b4b;">
+        <h3>🔒 セキュアログイン</h3>
+        <p>このシステムは高度なセキュリティ機能を備えています：</p>
+        <ul>
+        <li>強力なパスワードハッシュ化</li>
+        <li>レート制限（ブルートフォース攻撃対策）</li>
+        <li>SQLインジェクション対策</li>
+        <li>入力値検証</li>
+        </ul>
+        </div>
+        """, unsafe_allow_html=True)
+        
         username = st.text_input("ユーザー名")
         password = st.text_input("パスワード", type="password")
-        if st.button("ログイン"):
+        
+        if st.button("🔐 ログイン", type="primary"):
             user = login_user(username, password)
             if user:
                 st.session_state.authenticated = True
                 st.session_state.username = username
                 st.session_state.role = user[1]
-                st.success("ログイン成功")
+                st.success("✅ ログイン成功！セキュリティ認証完了")
                 st.experimental_rerun()
             else:
-                st.error("ユーザー名またはパスワードが違います")
-        st.info("アカウントが必要な場合は管理者に連絡してください。")
+                st.error("❌ 認証に失敗しました")
+        
+        st.info("💡 デフォルトアカウント: admin / Admin@2024!")
         return
 
     # 認証済みユーザーのみここから
