@@ -6,6 +6,7 @@
     <title>アパレル在庫管理システム</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         .sidebar {
             min-height: 100vh;
@@ -67,6 +68,35 @@
             padding: 15px;
             margin-bottom: 20px;
         }
+        .alert-stock {
+            background: linear-gradient(135deg, #ff6b6b 0%, #ee5a24 100%);
+            color: white;
+            border: none;
+        }
+        .nav-tabs .nav-link {
+            border: none;
+            border-radius: 10px;
+            margin-right: 5px;
+            color: #6c757d;
+        }
+        .nav-tabs .nav-link.active {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        .form-container {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        .chart-container {
+            background: white;
+            border-radius: 15px;
+            padding: 20px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
     </style>
 </head>
 <body>
@@ -91,6 +121,15 @@
                         <a class="nav-link" href="#" onclick="showPage('products', event)">
                             <i class="fas fa-box me-2"></i>商品管理
                         </a>
+                        <a class="nav-link" href="#" onclick="showPage('inventory', event)">
+                            <i class="fas fa-warehouse me-2"></i>在庫管理
+                        </a>
+                        <a class="nav-link" href="#" onclick="showPage('sales', event)">
+                            <i class="fas fa-shopping-cart me-2"></i>売上管理
+                        </a>
+                        <a class="nav-link" href="#" onclick="showPage('analysis', event)">
+                            <i class="fas fa-chart-bar me-2"></i>売上分析
+                        </a>
                     </nav>
                     <div class="mt-4">
                         <button class="btn btn-outline-light w-100" onclick="logout()">
@@ -108,7 +147,7 @@
                     
                     <!-- 基本統計 -->
                     <div class="row mb-4">
-                        <div class="col-md-6 mb-3">
+                        <div class="col-md-3 mb-3">
                             <div class="card metric-card">
                                 <div class="card-body text-center">
                                     <i class="fas fa-box fa-2x mb-2"></i>
@@ -117,7 +156,7 @@
                                 </div>
                             </div>
                         </div>
-                        <div class="col-md-6 mb-3">
+                        <div class="col-md-3 mb-3">
                             <div class="card metric-card">
                                 <div class="card-body text-center">
                                     <i class="fas fa-warehouse fa-2x mb-2"></i>
@@ -126,6 +165,36 @@
                                 </div>
                             </div>
                         </div>
+                        <div class="col-md-3 mb-3">
+                            <div class="card metric-card">
+                                <div class="card-body text-center">
+                                    <i class="fas fa-exclamation-triangle fa-2x mb-2"></i>
+                                    <h4 id="lowStockCount">0</h4>
+                                    <p class="mb-0">在庫不足</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <div class="card metric-card">
+                                <div class="card-body text-center">
+                                    <i class="fas fa-yen-sign fa-2x mb-2"></i>
+                                    <h4 id="totalSales">¥0</h4>
+                                    <p class="mb-0">総売上</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 在庫不足アラート -->
+                    <div id="lowStockAlert" class="alert alert-stock hidden">
+                        <i class="fas fa-exclamation-triangle me-2"></i>
+                        <strong>在庫不足警告:</strong> 一部の商品の在庫が不足しています。
+                    </div>
+
+                    <!-- 売上チャート -->
+                    <div class="chart-container">
+                        <h5 class="mb-3">売上推移</h5>
+                        <canvas id="salesChart" width="400" height="200"></canvas>
                     </div>
                 </div>
 
@@ -133,6 +202,38 @@
                 <div id="productsPage" class="hidden">
                     <h2 class="mb-4"><i class="fas fa-box me-2"></i>商品管理</h2>
                     
+                    <!-- 商品追加フォーム -->
+                    <div class="form-container">
+                        <h5 class="mb-3">新商品追加</h5>
+                        <form id="addProductForm">
+                            <div class="row">
+                                <div class="col-md-3 mb-3">
+                                    <label class="form-label">SKU</label>
+                                    <input type="text" class="form-control" id="newSku" required>
+                                </div>
+                                <div class="col-md-3 mb-3">
+                                    <label class="form-label">商品名</label>
+                                    <input type="text" class="form-control" id="newName" required>
+                                </div>
+                                <div class="col-md-2 mb-3">
+                                    <label class="form-label">価格</label>
+                                    <input type="number" class="form-control" id="newPrice" required>
+                                </div>
+                                <div class="col-md-2 mb-3">
+                                    <label class="form-label">初期在庫</label>
+                                    <input type="number" class="form-control" id="newQuantity" required>
+                                </div>
+                                <div class="col-md-2 mb-3">
+                                    <label class="form-label">&nbsp;</label>
+                                    <button type="submit" class="btn btn-primary w-100">
+                                        <i class="fas fa-plus me-2"></i>追加
+                                    </button>
+                                </div>
+                            </div>
+                        </form>
+                    </div>
+                    
+                    <!-- 商品一覧 -->
                     <div class="table-container">
                         <table class="table table-hover">
                             <thead>
@@ -141,9 +242,137 @@
                                     <th>商品名</th>
                                     <th>価格</th>
                                     <th>在庫数</th>
+                                    <th>操作</th>
                                 </tr>
                             </thead>
                             <tbody id="productTableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- 在庫管理 -->
+                <div id="inventoryPage" class="hidden">
+                    <h2 class="mb-4"><i class="fas fa-warehouse me-2"></i>在庫管理</h2>
+                    
+                    <!-- 在庫操作タブ -->
+                    <ul class="nav nav-tabs mb-4" id="inventoryTabs">
+                        <li class="nav-item">
+                            <a class="nav-link active" data-bs-toggle="tab" href="#inboundTab">入庫</a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" data-bs-toggle="tab" href="#outboundTab">出庫</a>
+                        </li>
+                    </ul>
+                    
+                    <div class="tab-content">
+                        <!-- 入庫 -->
+                        <div class="tab-pane fade show active" id="inboundTab">
+                            <div class="form-container">
+                                <h5 class="mb-3">入庫処理</h5>
+                                <form id="inboundForm">
+                                    <div class="row">
+                                        <div class="col-md-4 mb-3">
+                                            <label class="form-label">商品選択</label>
+                                            <select class="form-select" id="inboundProduct" required></select>
+                                        </div>
+                                        <div class="col-md-4 mb-3">
+                                            <label class="form-label">入庫数量</label>
+                                            <input type="number" class="form-control" id="inboundQuantity" required>
+                                        </div>
+                                        <div class="col-md-4 mb-3">
+                                            <label class="form-label">&nbsp;</label>
+                                            <button type="submit" class="btn btn-success w-100">
+                                                <i class="fas fa-plus me-2"></i>入庫
+                                            </button>
+                                        </div>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                        
+                        <!-- 出庫 -->
+                        <div class="tab-pane fade" id="outboundTab">
+                            <div class="form-container">
+                                <h5 class="mb-3">出庫処理</h5>
+                                <form id="outboundForm">
+                                    <div class="row">
+                                        <div class="col-md-4 mb-3">
+                                            <label class="form-label">商品選択</label>
+                                            <select class="form-select" id="outboundProduct" required></select>
+                                        </div>
+                                        <div class="col-md-4 mb-3">
+                                            <label class="form-label">出庫数量</label>
+                                            <input type="number" class="form-control" id="outboundQuantity" required>
+                                        </div>
+                                        <div class="col-md-4 mb-3">
+                                            <label class="form-label">&nbsp;</label>
+                                            <button type="submit" class="btn btn-warning w-100">
+                                                <i class="fas fa-minus me-2"></i>出庫
+                                            </button>
+                                        </div>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 売上管理 -->
+                <div id="salesPage" class="hidden">
+                    <h2 class="mb-4"><i class="fas fa-shopping-cart me-2"></i>売上管理</h2>
+                    
+                    <!-- 売上登録フォーム -->
+                    <div class="form-container">
+                        <h5 class="mb-3">売上登録</h5>
+                        <form id="salesForm">
+                            <div class="row">
+                                <div class="col-md-3 mb-3">
+                                    <label class="form-label">商品選択</label>
+                                    <select class="form-select" id="salesProduct" required></select>
+                                </div>
+                                <div class="col-md-3 mb-3">
+                                    <label class="form-label">販売数量</label>
+                                    <input type="number" class="form-control" id="salesQuantity" required>
+                                </div>
+                                <div class="col-md-3 mb-3">
+                                    <label class="form-label">販売価格</label>
+                                    <input type="number" class="form-control" id="salesPrice" required>
+                                </div>
+                                <div class="col-md-3 mb-3">
+                                    <label class="form-label">&nbsp;</label>
+                                    <button type="submit" class="btn btn-primary w-100">
+                                        <i class="fas fa-save me-2"></i>登録
+                                    </button>
+                                </div>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+
+                <!-- 売上分析 -->
+                <div id="analysisPage" class="hidden">
+                    <h2 class="mb-4"><i class="fas fa-chart-bar me-2"></i>売上分析</h2>
+                    
+                    <!-- 売上チャート -->
+                    <div class="chart-container">
+                        <h5 class="mb-3">売上推移</h5>
+                        <canvas id="analysisChart" width="400" height="200"></canvas>
+                    </div>
+                    
+                    <!-- 売上データテーブル -->
+                    <div class="table-container">
+                        <h5 class="mb-3">売上履歴</h5>
+                        <table class="table table-hover">
+                            <thead>
+                                <tr>
+                                    <th>日付</th>
+                                    <th>商品名</th>
+                                    <th>数量</th>
+                                    <th>単価</th>
+                                    <th>売上</th>
+                                </tr>
+                            </thead>
+                            <tbody id="salesTableBody"></tbody>
                         </table>
                     </div>
                 </div>
