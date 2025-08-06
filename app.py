@@ -176,6 +176,7 @@ def login_api():
         except Exception as db_error:
             print(f"データベース接続エラー: {db_error}")
             return jsonify({'success': False, 'message': f'データベース接続エラー: {str(db_error)}'})
+        
         cursor = conn.cursor()
         
         cursor.execute("SELECT id, role, password_hash FROM users WHERE username = ?", (username,))
@@ -261,25 +262,37 @@ def dashboard():
             db_path = '/tmp/inventory.db'
         else:
             db_path = os.environ.get('DATABASE_PATH', 'inventory.db')
+        
+        print(f"ダッシュボードAPI: データベースパス = {db_path}")
+        
+        if not os.path.exists(db_path):
+            print(f"データベースファイルが存在しません: {db_path}")
+            return jsonify({'error': 'データベースが初期化されていません'})
+        
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
         
         # 基本統計
         cursor.execute("SELECT COUNT(*) FROM products")
         total_products = cursor.fetchone()[0]
+        print(f"総商品数: {total_products}")
         
         cursor.execute("SELECT SUM(quantity) FROM products")
         total_stock = cursor.fetchone()[0] or 0
+        print(f"総在庫数: {total_stock}")
         
         # 在庫不足商品数
         cursor.execute("SELECT COUNT(*) FROM products WHERE quantity < 10")
         low_stock_count = cursor.fetchone()[0]
+        print(f"在庫不足商品数: {low_stock_count}")
         
         # 総売上（売上履歴テーブルがある場合）
         try:
             cursor.execute("SELECT SUM(total_amount) FROM sales_history")
             total_sales = cursor.fetchone()[0] or 0
-        except:
+            print(f"総売上: {total_sales}")
+        except Exception as e:
+            print(f"売上履歴テーブルエラー: {e}")
             total_sales = 0
         
         # 売上データ（過去7日間）
@@ -292,19 +305,28 @@ def dashboard():
                 ORDER BY date
             """)
             sales_data = [{'date': row[0], 'amount': row[1]} for row in cursor.fetchall()]
-        except:
+            print(f"売上データ: {sales_data}")
+        except Exception as e:
+            print(f"売上データ取得エラー: {e}")
             sales_data = []
         
         conn.close()
         
-        return jsonify({
+        result = {
             'total_products': total_products,
             'total_stock': total_stock,
             'low_stock_count': low_stock_count,
             'total_sales': total_sales,
             'sales_data': sales_data
-        })
+        }
+        
+        print(f"ダッシュボード結果: {result}")
+        return jsonify(result)
+        
     except Exception as e:
+        print(f"ダッシュボードエラー: {e}")
+        import traceback
+        print(f"エラー詳細: {traceback.format_exc()}")
         return jsonify({'error': str(e)})
 
 @app.route('/api/products', methods=['GET'])
@@ -315,16 +337,30 @@ def get_products():
             db_path = '/tmp/inventory.db'
         else:
             db_path = os.environ.get('DATABASE_PATH', 'inventory.db')
+        
+        print(f"商品API: データベースパス = {db_path}")
+        
+        if not os.path.exists(db_path):
+            print(f"データベースファイルが存在しません: {db_path}")
+            return jsonify({'error': 'データベースが初期化されていません'})
+        
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
         cursor.execute("SELECT id, sku, name, price, quantity FROM products")
         products = cursor.fetchall()
         conn.close()
         
-        return jsonify([{
+        result = [{
             'id': p[0], 'sku': p[1], 'name': p[2], 'price': p[3], 'quantity': p[4]
-        } for p in products])
+        } for p in products]
+        
+        print(f"商品一覧: {len(result)}件")
+        return jsonify(result)
+        
     except Exception as e:
+        print(f"商品APIエラー: {e}")
+        import traceback
+        print(f"エラー詳細: {traceback.format_exc()}")
         return jsonify({'error': str(e)})
 
 @app.route('/api/products', methods=['POST'])
