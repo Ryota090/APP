@@ -1,55 +1,20 @@
 from flask import Flask, render_template, send_from_directory, jsonify, request, session, redirect, url_for
 from flask_cors import CORS
-from flask_limiter import Limiter
-from flask_limiter.util import get_remote_address
-from flask_talisman import Talisman
 import os
 import sqlite3
 import bcrypt
 import json
 from datetime import datetime, timedelta
-import secrets
-from cryptography.fernet import Fernet
-import hashlib
-import re
 from functools import wraps
 
 app = Flask(__name__)
 
-# セキュリティ設定
-app.secret_key = os.environ.get('SECRET_KEY', Fernet.generate_key())
-# 本番環境でのみHTTPSを強制
-app.config['SESSION_COOKIE_SECURE'] = os.environ.get('FLASK_ENV') == 'production'
-app.config['SESSION_COOKIE_HTTPONLY'] = True
-app.config['SESSION_COOKIE_SAMESITE'] = 'Strict'
+# 基本設定
+app.secret_key = os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-production')
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(hours=2)
 
-# CORS設定（本番環境対応）
-CORS(app, origins=['*'])  # 本番環境では適切なドメインに制限してください
-
-# セキュリティヘッダー設定
-Talisman(app, 
-    content_security_policy={
-        'default-src': ["'self'"],
-        'script-src': ["'self'", "'unsafe-inline'", "https://cdn.jsdelivr.net", "https://cdnjs.cloudflare.com"],
-        'style-src': ["'self'", "'unsafe-inline'", "https://cdn.jsdelivr.net", "https://cdnjs.cloudflare.com"],
-        'font-src': ["'self'", "https://cdnjs.cloudflare.com"],
-        'img-src': ["'self'", "data:", "https:"],
-    },
-    force_https=os.environ.get('FLASK_ENV') == 'production'
-)
-
-# レート制限設定
-limiter = Limiter(
-    app=app,
-    key_func=get_remote_address,
-    default_limits=["200 per day", "50 per hour"]
-)
-
-# セキュリティ設定
-MAX_LOGIN_ATTEMPTS = 5
-LOGIN_TIMEOUT = 300  # 5分
-SESSION_TIMEOUT = 7200  # 2時間
+# CORS設定
+CORS(app, origins=['*'])
 
 # データベース初期化
 def init_database():
@@ -96,21 +61,12 @@ def init_database():
         )
     ''')
     
-    # ログイン試行履歴テーブル
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS login_attempts (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            ip_address VARCHAR NOT NULL,
-            username VARCHAR NOT NULL,
-            attempt_time DATETIME DEFAULT CURRENT_TIMESTAMP,
-            success BOOLEAN DEFAULT FALSE
-        )
-    ''')
-    
     # 初期データの挿入
     cursor.execute("SELECT COUNT(*) FROM users")
     if cursor.fetchone()[0] == 0:
-        password_hash = bcrypt.hashpw("Admin@2024!".encode('utf-8'), bcrypt.gensalt())
+        # パスワードをハッシュ化
+        password = "Admin@2024!"
+        password_hash = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())
         cursor.execute("INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)", 
                       ("admin", password_hash, "admin"))
         
@@ -135,10 +91,13 @@ def hash_password(password):
 def verify_password(password, hashed):
     """パスワード検証"""
     try:
-        if isinstance(hashed, bytes):
-            return bcrypt.checkpw(password.encode('utf-8'), hashed)
-        else:
-            return bcrypt.checkpw(password.encode('utf-8'), hashed.encode('utf-8'))
+        # ハッシュがbytesでない場合はbytesに変換
+        if not isinstance(hashed, bytes):
+            hashed = hashed.encode('utf-8')
+        
+        # パスワードをbytesに変換して検証
+        password_bytes = password.encode('utf-8')
+        return bcrypt.checkpw(password_bytes, hashed)
     except Exception as e:
         print(f"パスワード検証エラー: {e}")
         return False
@@ -147,47 +106,7 @@ def validate_input(text, max_length=100):
     """入力値検証"""
     if not text or len(text) > max_length:
         return False
-    # SQLインジェクション対策
-    dangerous_patterns = [
-        ';', '--', '/*', '*/', 
-        'union', 'select', 'insert', 'update', 'delete', 'drop',
-        'create', 'alter', 'exec', 'execute'
-    ]
-    text_lower = text.lower()
-    for pattern in dangerous_patterns:
-        if pattern in text_lower and len(pattern) > 2:
-            return False
     return True
-
-def check_rate_limit(ip_address, username):
-    """レート制限チェック"""
-    db_path = os.environ.get('DATABASE_PATH', 'inventory.db')
-    conn = sqlite3.connect(db_path)
-    cursor = conn.cursor()
-    
-    # 過去5分間の試行回数をチェック
-    five_minutes_ago = datetime.now() - timedelta(minutes=5)
-    cursor.execute("""
-        SELECT COUNT(*) FROM login_attempts 
-        WHERE ip_address = ? AND username = ? AND attempt_time > ?
-    """, (ip_address, username, five_minutes_ago))
-    
-    attempts = cursor.fetchone()[0]
-    conn.close()
-    
-    return attempts < MAX_LOGIN_ATTEMPTS
-
-def log_login_attempt(ip_address, username, success):
-    """ログイン試行を記録"""
-    db_path = os.environ.get('DATABASE_PATH', 'inventory.db')
-    conn = sqlite3.connect(db_path)
-    cursor = conn.cursor()
-    cursor.execute("""
-        INSERT INTO login_attempts (ip_address, username, success) 
-        VALUES (?, ?, ?)
-    """, (ip_address, username, success))
-    conn.commit()
-    conn.close()
 
 def login_required(f):
     """ログイン必須デコレータ"""
@@ -233,7 +152,6 @@ def init_database_api():
 
 # ログイン処理
 @app.route('/api/login', methods=['POST'])
-@limiter.limit("5 per minute")
 def login_api():
     data = request.get_json()
     username = data.get('username')
@@ -242,14 +160,8 @@ def login_api():
     if not username or not password:
         return jsonify({'success': False, 'message': 'ユーザー名とパスワードを入力してください'})
     
-    # レート制限チェック
-    if not check_rate_limit(request.remote_addr, username):
-        log_login_attempt(request.remote_addr, username, False)
-        return jsonify({'success': False, 'message': f'ログイン試行回数が上限に達しました。{LOGIN_TIMEOUT}秒後に再試行してください。'})
-    
     # 入力値検証
     if not validate_input(username) or not validate_input(password):
-        log_login_attempt(request.remote_addr, username, False)
         return jsonify({'success': False, 'message': '無効な入力です'})
     
     try:
@@ -270,8 +182,11 @@ def login_api():
         user = cursor.fetchone()
         
         if user:
-            # パスワード検証のデバッグ情報
+            # パスワード検証（デバッグ情報付き）
+            print(f"ログイン試行: username={username}, password={password}")
+            print(f"DB password_hash: {user[2]}")
             password_valid = verify_password(password, user[2])
+            print(f"パスワード検証結果: {password_valid}")
             
             if password_valid:
                 # ログイン成功
@@ -284,8 +199,6 @@ def login_api():
                 # 最終ログイン時間を更新
                 cursor.execute("UPDATE users SET last_login = ? WHERE id = ?", (datetime.now(), user[0]))
                 conn.commit()
-                
-                log_login_attempt(request.remote_addr, username, True)
                 conn.close()
                 
                 return jsonify({
@@ -297,11 +210,9 @@ def login_api():
                     }
                 })
             else:
-                log_login_attempt(request.remote_addr, username, False)
                 conn.close()
                 return jsonify({'success': False, 'message': 'パスワードが正しくありません'})
         else:
-            log_login_attempt(request.remote_addr, username, False)
             conn.close()
             return jsonify({'success': False, 'message': 'ユーザーが見つかりません'})
             
