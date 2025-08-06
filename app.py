@@ -22,7 +22,7 @@ def init_database():
         db_path = os.environ.get('DATABASE_PATH', 'inventory.db')
         print(f"データベースパス: {db_path}")
         conn = sqlite3.connect(db_path)
-    cursor = conn.cursor()
+        cursor = conn.cursor()
     
     # ユーザーテーブル
     cursor.execute('''
@@ -152,18 +152,6 @@ def login():
         return redirect(url_for('index'))
     return render_template('login.html')
 
-# データベース初期化エンドポイント（開発用）
-@app.route('/api/init-db', methods=['POST'])
-def init_database_api():
-    try:
-        print("データベース初期化開始")
-        init_database()
-        print("データベース初期化完了")
-        return jsonify({'success': True, 'message': 'データベースが初期化されました'})
-    except Exception as e:
-        print(f"データベース初期化エラー: {e}")
-        return jsonify({'success': False, 'message': f'データベース初期化エラー: {str(e)}'})
-
 # ログイン処理
 @app.route('/api/login', methods=['POST'])
 def login_api():
@@ -178,61 +166,38 @@ def login_api():
     if not validate_input(username) or not validate_input(password):
         return jsonify({'success': False, 'message': '無効な入力です'})
     
-    try:
-        db_path = os.environ.get('DATABASE_PATH', 'inventory.db')
-        conn = sqlite3.connect(db_path)
-        cursor = conn.cursor()
+    conn = sqlite3.connect('inventory.db')
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, role, password_hash FROM users WHERE username = ?", (username,))
+    user = cursor.fetchone()
+    
+    if user and verify_password(password, user[2]):
+        # ログイン成功
+        session.permanent = True
+        session['user_id'] = user[0]
+        session['username'] = username
+        session['role'] = user[1]
+        session['login_time'] = datetime.now().isoformat()
         
-        # データベースが空の場合は初期化
-        cursor.execute("SELECT COUNT(*) FROM users")
-        user_count = cursor.fetchone()[0]
+        # 最終ログイン時間を更新
+        cursor.execute("UPDATE users SET last_login = ? WHERE id = ?", (datetime.now(), user[0]))
+        conn.commit()
         
-        if user_count == 0:
-            init_database()
-            cursor.execute("SELECT COUNT(*) FROM users")
-            user_count = cursor.fetchone()[0]
+        log_login_attempt(request.remote_addr, username, True)
+        conn.close()
         
-        cursor.execute("SELECT id, role, password_hash FROM users WHERE username = ?", (username,))
-        user = cursor.fetchone()
-        
-        if user:
-            # パスワード検証（デバッグ情報付き）
-            print(f"ログイン試行: username={username}, password={password}")
-            print(f"DB password_hash: {user[2]}")
-            password_valid = verify_password(password, user[2])
-            print(f"パスワード検証結果: {password_valid}")
-            
-            if password_valid:
-                # ログイン成功
-                session.permanent = True
-                session['user_id'] = user[0]
-                session['username'] = username
-                session['role'] = user[1]
-                session['login_time'] = datetime.now().isoformat()
-                
-                # 最終ログイン時間を更新
-                cursor.execute("UPDATE users SET last_login = ? WHERE id = ?", (datetime.now(), user[0]))
-                conn.commit()
-                conn.close()
-                
-                return jsonify({
-                    'success': True, 
-                    'user': {
-                        'id': user[0],
-                        'username': username,
-                        'role': user[1]
-                    }
-                })
-            else:
-                conn.close()
-                return jsonify({'success': False, 'message': 'パスワードが正しくありません'})
-        else:
-            conn.close()
-            return jsonify({'success': False, 'message': 'ユーザーが見つかりません'})
-            
-    except Exception as e:
-        print(f"ログイン処理エラー: {e}")
-        return jsonify({'success': False, 'message': f'ログイン処理エラー: {str(e)}'})
+        return jsonify({
+            'success': True, 
+            'user': {
+                'id': user[0],
+                'username': username,
+                'role': user[1]
+            }
+        })
+    else:
+        log_login_attempt(request.remote_addr, username, False)
+        conn.close()
+        return jsonify({'success': False, 'message': 'ユーザー名またはパスワードが違います'})
 
 # ログアウト
 @app.route('/api/logout', methods=['POST'])
@@ -451,21 +416,6 @@ def get_sales_analysis():
 @app.route('/static/<path:filename>')
 def static_files(filename):
     return send_from_directory('static', filename)
-
-# エラーハンドラー
-@app.errorhandler(404)
-def not_found(error):
-    return jsonify({'error': 'ページが見つかりません'}), 404
-
-@app.errorhandler(500)
-def internal_error(error):
-    print(f"500エラー: {error}")
-    return jsonify({'error': 'サーバー内部エラーが発生しました'}), 500
-
-@app.errorhandler(Exception)
-def handle_exception(e):
-    print(f"予期しないエラー: {e}")
-    return jsonify({'error': f'予期しないエラーが発生しました: {str(e)}'}), 500
 
 if __name__ == '__main__':
     print("アプリケーション起動中...")
