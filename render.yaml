@@ -4,18 +4,14 @@ services:
     env: python
     plan: free
     buildCommand: pip install -r requirements.txt
-    startCommand: streamlit run app.py --server.port $PORT --server.address 0.0.0.0 --server.headless true
+    startCommand: gunicorn app:app --bind 0.0.0.0:$PORT
     envVars:
       - key: PYTHON_VERSION
         value: "3.11.8"
-      - key: STREAMLIT_SERVER_HEADLESS
-        value: "true"
-      - key: STREAMLIT_SERVER_ENABLE_CORS
-        value: "false"
       - key: SECRET_KEY
         generateValue: true
-      - key: STREAMLIT_SERVER_ENABLE_STATIC_SERVING
+      - key: FLASK_ENV
+        value: "production"
+      - key: FLASK_DEBUG
         value: "false"
-      - key: STREAMLIT_SERVER_ENABLE_XSRF_PROTECTION
-        value: "true"
     autoDeploy: true

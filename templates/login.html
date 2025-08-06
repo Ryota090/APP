@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ログイン - アパレル在庫管理システム</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        body {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .login-card {
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+            max-width: 400px;
+            width: 100%;
+        }
+        .security-info {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 15px;
+            margin-bottom: 20px;
+            border-left: 4px solid #28a745;
+        }
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+            border-radius: 10px;
+            padding: 12px;
+        }
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+        }
+        .form-control {
+            border-radius: 10px;
+            padding: 12px;
+        }
+        .alert {
+            border-radius: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="login-card">
+        <div class="text-center mb-4">
+            <i class="fas fa-tshirt fa-3x text-primary mb-3"></i>
+            <h2>アパレル在庫管理システム</h2>
+            <p class="text-muted">セキュアログイン</p>
+        </div>
+        
+        <div class="security-info">
+            <h6><i class="fas fa-shield-alt me-2"></i>セキュリティ機能</h6>
+            <ul class="mb-0 small">
+                <li>強力なパスワードハッシュ化</li>
+                <li>レート制限（ブルートフォース攻撃対策）</li>
+                <li>SQLインジェクション対策</li>
+                <li>セッション管理</li>
+            </ul>
+        </div>
+        
+        <div id="alertContainer"></div>
+        
+        <form id="loginForm">
+            <div class="mb-3">
+                <label for="username" class="form-label">ユーザー名</label>
+                <input type="text" class="form-control" id="username" required>
+            </div>
+            <div class="mb-3">
+                <label for="password" class="form-label">パスワード</label>
+                <input type="password" class="form-control" id="password" required>
+            </div>
+            <button type="submit" class="btn btn-primary w-100">
+                <i class="fas fa-sign-in-alt me-2"></i>ログイン
+            </button>
+        </form>
+        
+        <div class="mt-3 text-center">
+            <small class="text-muted">デフォルトアカウント: admin / Admin@2024!</small>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        document.getElementById('loginForm').addEventListener('submit', async function(e) {
+            e.preventDefault();
+            
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            
+            try {
+                const response = await fetch('/api/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ username, password })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    showAlert('success', 'ログイン成功！リダイレクト中...');
+                    setTimeout(() => {
+                        window.location.href = '/';
+                    }, 1000);
+                } else {
+                    showAlert('danger', data.message);
+                }
+            } catch (error) {
+                showAlert('danger', 'ネットワークエラーが発生しました');
+            }
+        });
+        
+        function showAlert(type, message) {
+            const alertContainer = document.getElementById('alertContainer');
+            alertContainer.innerHTML = `
+                <div class="alert alert-${type} alert-dismissible fade show" role="alert">
+                    ${message}
+                    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                </div>
+            `;
+        }
+    </script>
+</body>
+</html> 
