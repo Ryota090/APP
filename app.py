@@ -20,6 +20,12 @@ def init_database():
         db_path = os.environ.get('DATABASE_PATH', 'inventory.db')
         print(f"データベースパス: {db_path}")
         
+        # データベースディレクトリの作成
+        db_dir = os.path.dirname(db_path)
+        if db_dir and not os.path.exists(db_dir):
+            os.makedirs(db_dir, exist_ok=True)
+            print(f"データベースディレクトリを作成: {db_dir}")
+        
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
         
@@ -285,7 +291,7 @@ def static_files(filename):
 if __name__ == '__main__':
     print("=== アプリケーション起動開始 ===")
     try:
-        init_database()
+    init_database()
     except Exception as e:
         print(f"起動時のデータベース初期化エラー: {e}")
     
