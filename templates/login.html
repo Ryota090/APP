@@ -84,6 +84,10 @@
         
         <div class="mt-3 text-center">
             <small class="text-muted">デフォルトアカウント: admin / Admin@2024!</small>
+            <br>
+            <button type="button" class="btn btn-outline-secondary btn-sm mt-2" onclick="initDatabase()">
+                データベース初期化
+            </button>
         </div>
     </div>
 
@@ -127,6 +131,27 @@
                     <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
                 </div>
             `;
+        }
+        
+        async function initDatabase() {
+            try {
+                const response = await fetch('/api/init-db', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    }
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    showAlert('success', 'データベースが初期化されました。ログインを試してください。');
+                } else {
+                    showAlert('danger', data.message);
+                }
+            } catch (error) {
+                showAlert('danger', 'データベース初期化エラーが発生しました');
+            }
         }
     </script>
 </body>
