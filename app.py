@@ -147,6 +147,7 @@ def admin_required(f):
 # ヘルスチェック
 @app.route('/health')
 def health_check():
+    initialize_app()
     return jsonify({'status': 'ok', 'message': 'アプリケーションは正常に動作しています'})
 
 # ルート - メインページ
@@ -162,9 +163,24 @@ def login():
         return redirect(url_for('index'))
     return render_template('login.html')
 
+# データベース初期化エンドポイント（開発用）
+@app.route('/api/init-db', methods=['POST'])
+def init_database_api():
+    try:
+        print("データベース初期化開始")
+        init_database()
+        print("データベース初期化完了")
+        return jsonify({'success': True, 'message': 'データベースが初期化されました'})
+    except Exception as e:
+        print(f"データベース初期化エラー: {e}")
+        import traceback
+        print(f"エラー詳細: {traceback.format_exc()}")
+        return jsonify({'success': False, 'message': f'データベース初期化エラー: {str(e)}'})
+
 # ログイン処理
 @app.route('/api/login', methods=['POST'])
 def login_api():
+    initialize_app()
     data = request.get_json()
     username = data.get('username')
     password = data.get('password')
@@ -442,26 +458,26 @@ def handle_exception(e):
     print(f"予期しないエラー: {e}")
     return jsonify({'error': f'予期しないエラーが発生しました: {str(e)}'}), 500
 
-# アプリケーション起動時のエラーハンドリング
-@app.before_first_request
-def before_first_request():
-    try:
-        print("初回リクエスト時の初期化処理開始")
-        init_database()
-        print("初回リクエスト時の初期化処理完了")
-    except Exception as e:
-        print(f"初回リクエスト時の初期化エラー: {e}")
-        # エラーが発生してもアプリケーションは継続
+# アプリケーション初期化フラグ
+_app_initialized = False
+
+def initialize_app():
+    """アプリケーション初期化"""
+    global _app_initialized
+    if not _app_initialized:
+        try:
+            print("アプリケーション初期化処理開始")
+            init_database()
+            print("アプリケーション初期化処理完了")
+            _app_initialized = True
+        except Exception as e:
+            print(f"アプリケーション初期化エラー: {e}")
+            import traceback
+            print(f"エラー詳細: {traceback.format_exc()}")
+            # エラーが発生してもアプリケーションは継続
 
 if __name__ == '__main__':
     print("アプリケーション起動中...")
-    try:
-        init_database()
-        print("データベース初期化完了")
-    except Exception as e:
-        print(f"データベース初期化エラー: {e}")
-        # エラーが発生してもアプリケーションは起動を続行
-    
     port = int(os.environ.get('PORT', 5000))
     debug = os.environ.get('FLASK_DEBUG', 'false').lower() == 'true'
     print(f"ポート {port} でアプリケーションを起動します")
