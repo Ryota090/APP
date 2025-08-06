@@ -22,6 +22,7 @@ print("Flaskアプリケーション初期化中...")
 # データベース初期化
 def init_database():
     try:
+        print("=== データベース初期化開始 ===")
         db_path = os.environ.get('DATABASE_PATH', 'inventory.db')
         print(f"データベースパス: {db_path}")
         
@@ -31,8 +32,10 @@ def init_database():
             os.makedirs(db_dir, exist_ok=True)
             print(f"データベースディレクトリを作成: {db_dir}")
         
+        print("SQLite接続を試行中...")
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
+        print("SQLite接続成功")
     
     # ユーザーテーブル
     cursor.execute('''
@@ -94,9 +97,11 @@ def init_database():
     
     conn.commit()
     conn.close()
-    print("データベース初期化処理完了")
+    print("=== データベース初期化処理完了 ===")
     except Exception as e:
-        print(f"データベース初期化中にエラー: {e}")
+        print(f"=== データベース初期化中にエラー: {e} ===")
+        import traceback
+        print(f"エラー詳細: {traceback.format_exc()}")
         raise e
 
 # セキュリティ関数
@@ -147,8 +152,12 @@ def admin_required(f):
 # ヘルスチェック
 @app.route('/health')
 def health_check():
-    initialize_app()
     return jsonify({'status': 'ok', 'message': 'アプリケーションは正常に動作しています'})
+
+# シンプルなテストエンドポイント
+@app.route('/test')
+def test():
+    return jsonify({'status': 'ok', 'message': 'テストエンドポイントが正常に動作しています'})
 
 # ルート - メインページ
 @app.route('/')
@@ -466,19 +475,21 @@ def initialize_app():
     global _app_initialized
     if not _app_initialized:
         try:
-            print("アプリケーション初期化処理開始")
+            print("=== アプリケーション初期化処理開始 ===")
             init_database()
-            print("アプリケーション初期化処理完了")
+            print("=== アプリケーション初期化処理完了 ===")
             _app_initialized = True
         except Exception as e:
-            print(f"アプリケーション初期化エラー: {e}")
+            print(f"=== アプリケーション初期化エラー: {e} ===")
             import traceback
             print(f"エラー詳細: {traceback.format_exc()}")
             # エラーが発生してもアプリケーションは継続
+            print("エラーが発生しましたが、アプリケーションは継続します")
 
 if __name__ == '__main__':
-    print("アプリケーション起動中...")
+    print("=== アプリケーション起動中... ===")
     port = int(os.environ.get('PORT', 5000))
     debug = os.environ.get('FLASK_DEBUG', 'false').lower() == 'true'
     print(f"ポート {port} でアプリケーションを起動します")
+    print("=== アプリケーション起動完了 ===")
     app.run(host='0.0.0.0', port=port, debug=debug)
