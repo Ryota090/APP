@@ -56,6 +56,20 @@ def init_database():
             )
         ''')
         
+        # 売上履歴テーブル
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS sales_history (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                product_id INTEGER NOT NULL,
+                product_name VARCHAR NOT NULL,
+                quantity INTEGER NOT NULL,
+                unit_price INTEGER NOT NULL,
+                total_amount INTEGER NOT NULL,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (product_id) REFERENCES products (id)
+            )
+        ''')
+        
         # 初期データの挿入
         cursor.execute("SELECT COUNT(*) FROM users")
         user_count = cursor.fetchone()[0]
@@ -246,22 +260,50 @@ def dashboard():
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
         
+        # 基本統計
         cursor.execute("SELECT COUNT(*) FROM products")
         total_products = cursor.fetchone()[0]
         
         cursor.execute("SELECT SUM(quantity) FROM products")
         total_stock = cursor.fetchone()[0] or 0
         
+        # 在庫不足商品数
+        cursor.execute("SELECT COUNT(*) FROM products WHERE quantity < 10")
+        low_stock_count = cursor.fetchone()[0]
+        
+        # 総売上（売上履歴テーブルがある場合）
+        try:
+            cursor.execute("SELECT SUM(total_amount) FROM sales_history")
+            total_sales = cursor.fetchone()[0] or 0
+        except:
+            total_sales = 0
+        
+        # 売上データ（過去7日間）
+        try:
+            cursor.execute("""
+                SELECT DATE(created_at) as date, SUM(total_amount) as amount 
+                FROM sales_history 
+                WHERE created_at >= date('now', '-7 days')
+                GROUP BY DATE(created_at)
+                ORDER BY date
+            """)
+            sales_data = [{'date': row[0], 'amount': row[1]} for row in cursor.fetchall()]
+        except:
+            sales_data = []
+        
         conn.close()
         
         return jsonify({
             'total_products': total_products,
-            'total_stock': total_stock
+            'total_stock': total_stock,
+            'low_stock_count': low_stock_count,
+            'total_sales': total_sales,
+            'sales_data': sales_data
         })
     except Exception as e:
         return jsonify({'error': str(e)})
 
-@app.route('/api/products')
+@app.route('/api/products', methods=['GET'])
 @login_required
 def get_products():
     try:
@@ -278,6 +320,194 @@ def get_products():
         return jsonify([{
             'id': p[0], 'sku': p[1], 'name': p[2], 'price': p[3], 'quantity': p[4]
         } for p in products])
+    except Exception as e:
+        return jsonify({'error': str(e)})
+
+@app.route('/api/products', methods=['POST'])
+@login_required
+def add_product():
+    try:
+        data = request.get_json()
+        sku = data.get('sku')
+        name = data.get('name')
+        price = data.get('price')
+        quantity = data.get('quantity')
+        
+        if not all([sku, name, price, quantity]):
+            return jsonify({'success': False, 'message': 'すべての項目を入力してください'})
+        
+        if os.environ.get('RENDER'):
+            db_path = '/tmp/inventory.db'
+        else:
+            db_path = os.environ.get('DATABASE_PATH', 'inventory.db')
+        
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        
+        cursor.execute("INSERT INTO products (sku, name, price, quantity) VALUES (?, ?, ?, ?)", 
+                      (sku, name, price, quantity))
+        conn.commit()
+        conn.close()
+        
+        return jsonify({'success': True, 'message': '商品が追加されました'})
+    except sqlite3.IntegrityError:
+        return jsonify({'success': False, 'message': 'SKUが既に存在します'})
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'エラー: {str(e)}'})
+
+@app.route('/api/inventory/inbound', methods=['POST'])
+@login_required
+def inbound_inventory():
+    try:
+        data = request.get_json()
+        product_id = data.get('product_id')
+        quantity = data.get('quantity')
+        
+        if not all([product_id, quantity]):
+            return jsonify({'success': False, 'message': '商品と数量を選択してください'})
+        
+        if os.environ.get('RENDER'):
+            db_path = '/tmp/inventory.db'
+        else:
+            db_path = os.environ.get('DATABASE_PATH', 'inventory.db')
+        
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        
+        cursor.execute("UPDATE products SET quantity = quantity + ? WHERE id = ?", (quantity, product_id))
+        conn.commit()
+        conn.close()
+        
+        return jsonify({'success': True, 'message': '入庫処理が完了しました'})
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'エラー: {str(e)}'})
+
+@app.route('/api/inventory/outbound', methods=['POST'])
+@login_required
+def outbound_inventory():
+    try:
+        data = request.get_json()
+        product_id = data.get('product_id')
+        quantity = data.get('quantity')
+        
+        if not all([product_id, quantity]):
+            return jsonify({'success': False, 'message': '商品と数量を選択してください'})
+        
+        if os.environ.get('RENDER'):
+            db_path = '/tmp/inventory.db'
+        else:
+            db_path = os.environ.get('DATABASE_PATH', 'inventory.db')
+        
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        
+        # 在庫確認
+        cursor.execute("SELECT quantity FROM products WHERE id = ?", (product_id,))
+        current_quantity = cursor.fetchone()[0]
+        
+        if current_quantity < quantity:
+            return jsonify({'success': False, 'message': '在庫が不足しています'})
+        
+        cursor.execute("UPDATE products SET quantity = quantity - ? WHERE id = ?", (quantity, product_id))
+        conn.commit()
+        conn.close()
+        
+        return jsonify({'success': True, 'message': '出庫処理が完了しました'})
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'エラー: {str(e)}'})
+
+@app.route('/api/sales', methods=['POST'])
+@login_required
+def add_sale():
+    try:
+        data = request.get_json()
+        product_id = data.get('product_id')
+        quantity = data.get('quantity')
+        price = data.get('price')
+        
+        if not all([product_id, quantity, price]):
+            return jsonify({'success': False, 'message': 'すべての項目を入力してください'})
+        
+        if os.environ.get('RENDER'):
+            db_path = '/tmp/inventory.db'
+        else:
+            db_path = os.environ.get('DATABASE_PATH', 'inventory.db')
+        
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        
+        # 商品名取得
+        cursor.execute("SELECT name, quantity FROM products WHERE id = ?", (product_id,))
+        product_info = cursor.fetchone()
+        if not product_info:
+            return jsonify({'success': False, 'message': '商品が見つかりません'})
+        
+        product_name, current_quantity = product_info
+        
+        # 在庫確認
+        if current_quantity < quantity:
+            return jsonify({'success': False, 'message': '在庫が不足しています'})
+        
+        total_amount = quantity * price
+        
+        # 売上登録
+        cursor.execute("""
+            INSERT INTO sales_history (product_id, product_name, quantity, unit_price, total_amount) 
+            VALUES (?, ?, ?, ?, ?)
+        """, (product_id, product_name, quantity, price, total_amount))
+        
+        # 在庫更新
+        cursor.execute("UPDATE products SET quantity = quantity - ? WHERE id = ?", (quantity, product_id))
+        
+        conn.commit()
+        conn.close()
+        
+        return jsonify({'success': True, 'message': '売上が登録されました'})
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'エラー: {str(e)}'})
+
+@app.route('/api/sales-analysis')
+@login_required
+def sales_analysis():
+    try:
+        if os.environ.get('RENDER'):
+            db_path = '/tmp/inventory.db'
+        else:
+            db_path = os.environ.get('DATABASE_PATH', 'inventory.db')
+        
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
+        
+        # 商品別売上データ
+        cursor.execute("""
+            SELECT product_name, SUM(total_amount) as sales 
+            FROM sales_history 
+            GROUP BY product_name 
+            ORDER BY sales DESC
+        """)
+        chart_data = [{'product': row[0], 'sales': row[1]} for row in cursor.fetchall()]
+        
+        # 売上履歴
+        cursor.execute("""
+            SELECT created_at, product_name, quantity, unit_price, total_amount 
+            FROM sales_history 
+            ORDER BY created_at DESC 
+            LIMIT 50
+        """)
+        sales_history = [{
+            'date': row[0], 
+            'product_name': row[1], 
+            'quantity': row[2], 
+            'price': row[3], 
+            'total': row[4]
+        } for row in cursor.fetchall()]
+        
+        conn.close()
+        
+        return jsonify({
+            'chart_data': chart_data,
+            'sales_history': sales_history
+        })
     except Exception as e:
         return jsonify({'error': str(e)})
 
