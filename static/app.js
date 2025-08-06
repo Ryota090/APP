@@ -5,20 +5,25 @@ let appData = {
 };
 
 // ページ表示制御
-function showPage(pageName) {
+function showPage(pageName, event) {
     // すべてのページを非表示
     document.querySelectorAll('[id$="Page"]').forEach(page => {
         page.classList.add('hidden');
     });
     
     // 指定されたページを表示
-    document.getElementById(pageName + 'Page').classList.remove('hidden');
+    const targetPage = document.getElementById(pageName + 'Page');
+    if (targetPage) {
+        targetPage.classList.remove('hidden');
+    }
     
     // ナビゲーションのアクティブ状態を更新
     document.querySelectorAll('.nav-link').forEach(link => {
         link.classList.remove('active');
     });
-    event.target.classList.add('active');
+    if (event && event.target) {
+        event.target.classList.add('active');
+    }
     
     // ページに応じた初期化
     switch(pageName) {
@@ -42,16 +47,22 @@ function showPage(pageName) {
 }
 
 // 商品タブ表示制御
-function showProductTab(tabName) {
-    document.getElementById('productListTab').classList.add('hidden');
-    document.getElementById('productAddTab').classList.add('hidden');
-    document.getElementById('product' + tabName.charAt(0).toUpperCase() + tabName.slice(1) + 'Tab').classList.remove('hidden');
+function showProductTab(tabName, event) {
+    const listTab = document.getElementById('productListTab');
+    const addTab = document.getElementById('productAddTab');
+    const targetTab = document.getElementById('product' + tabName.charAt(0).toUpperCase() + tabName.slice(1) + 'Tab');
+    
+    if (listTab) listTab.classList.add('hidden');
+    if (addTab) addTab.classList.add('hidden');
+    if (targetTab) targetTab.classList.remove('hidden');
     
     // タブのアクティブ状態を更新
     document.querySelectorAll('.nav-tabs .nav-link').forEach(link => {
         link.classList.remove('active');
     });
-    event.target.classList.add('active');
+    if (event && event.target) {
+        event.target.classList.add('active');
+    }
 }
 
 // ログアウト処理
@@ -77,13 +88,21 @@ async function logout() {
 async function updateDashboard() {
     try {
         const response = await fetch('/api/dashboard');
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
         const data = await response.json();
         
         // メトリクス更新
-        document.getElementById('totalProducts').textContent = data.total_products;
-        document.getElementById('totalStock').textContent = data.total_stock.toLocaleString();
-        document.getElementById('weeklySales').textContent = '¥' + data.weekly_sales.toLocaleString();
-        document.getElementById('lowStockCount').textContent = data.low_stock;
+        const totalProductsEl = document.getElementById('totalProducts');
+        const totalStockEl = document.getElementById('totalStock');
+        const weeklySalesEl = document.getElementById('weeklySales');
+        const lowStockCountEl = document.getElementById('lowStockCount');
+        
+        if (totalProductsEl) totalProductsEl.textContent = data.total_products || 0;
+        if (totalStockEl) totalStockEl.textContent = (data.total_stock || 0).toLocaleString();
+        if (weeklySalesEl) weeklySalesEl.textContent = '¥' + (data.weekly_sales || 0).toLocaleString();
+        if (lowStockCountEl) lowStockCountEl.textContent = data.low_stock || 0;
         
         // 在庫僅少アラート
         updateLowStockAlert();
@@ -99,23 +118,28 @@ async function updateDashboard() {
 async function updateLowStockAlert() {
     try {
         const response = await fetch('/api/products');
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
         const products = await response.json();
         
         const lowStockProducts = products.filter(product => product.quantity <= 10);
         const alertDiv = document.getElementById('lowStockAlert');
         
-        if (lowStockProducts.length === 0) {
-            alertDiv.innerHTML = '<div class="alert alert-success">在庫僅少商品はありません</div>';
-        } else {
-            let alertHTML = '';
-            lowStockProducts.forEach(product => {
-                alertHTML += `
-                    <div class="alert alert-stock mb-2">
-                        <strong>${product.name}</strong> - 在庫: ${product.quantity}点
-                    </div>
-                `;
-            });
-            alertDiv.innerHTML = alertHTML;
+        if (alertDiv) {
+            if (lowStockProducts.length === 0) {
+                alertDiv.innerHTML = '<div class="alert alert-success">在庫僅少商品はありません</div>';
+            } else {
+                let alertHTML = '';
+                lowStockProducts.forEach(product => {
+                    alertHTML += `
+                        <div class="alert alert-stock mb-2">
+                            <strong>${product.name}</strong> - 在庫: ${product.quantity}点
+                        </div>
+                    `;
+                });
+                alertDiv.innerHTML = alertHTML;
+            }
         }
     } catch (error) {
         console.error('在庫アラート更新エラー:', error);
@@ -126,9 +150,27 @@ async function updateLowStockAlert() {
 async function updateSalesChart() {
     try {
         const response = await fetch('/api/sales/analysis?period=7');
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
         const data = await response.json();
         
-        const ctx = document.getElementById('salesChart').getContext('2d');
+        const canvas = document.getElementById('salesChart');
+        if (!canvas) {
+            console.warn('salesChart canvas not found');
+            return;
+        }
+        
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+            console.warn('Could not get 2D context for salesChart');
+            return;
+        }
+        
+        // 既存のチャートを破棄
+        if (window.salesChart) {
+            window.salesChart.destroy();
+        }
         
         const labels = data.daily_sales.map(item => {
             const date = new Date(item.date);
@@ -136,7 +178,7 @@ async function updateSalesChart() {
         });
         const salesData = data.daily_sales.map(item => item.sales);
         
-        new Chart(ctx, {
+        window.salesChart = new Chart(ctx, {
             type: 'line',
             data: {
                 labels: labels,
@@ -176,27 +218,32 @@ async function updateSalesChart() {
 async function updateProductList() {
     try {
         const response = await fetch('/api/products');
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
         const products = await response.json();
         appData.products = products;
         
         const tbody = document.getElementById('productTableBody');
-        tbody.innerHTML = '';
-        
-        products.forEach(product => {
-            const row = document.createElement('tr');
-            row.innerHTML = `
-                <td>${product.sku}</td>
-                <td>${product.name}</td>
-                <td>¥${product.price.toLocaleString()}</td>
-                <td>${product.quantity}点</td>
-                <td>
-                    <button class="btn btn-sm btn-outline-primary" onclick="editProduct(${product.id})">
-                        <i class="fas fa-edit"></i>
-                    </button>
-                </td>
-            `;
-            tbody.appendChild(row);
-        });
+        if (tbody) {
+            tbody.innerHTML = '';
+            
+            products.forEach(product => {
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${product.sku || ''}</td>
+                    <td>${product.name || ''}</td>
+                    <td>¥${(product.price || 0).toLocaleString()}</td>
+                    <td>${product.quantity || 0}点</td>
+                    <td>
+                        <button class="btn btn-sm btn-outline-primary" onclick="editProduct(${product.id})">
+                            <i class="fas fa-edit"></i>
+                        </button>
+                    </td>
+                `;
+                tbody.appendChild(row);
+            });
+        }
     } catch (error) {
         console.error('商品一覧更新エラー:', error);
     }
@@ -510,12 +557,19 @@ async function initializeApp() {
         await updateProductList();
         
         // イベントリスナー設定
-        document.getElementById('addProductForm').addEventListener('submit', addProduct);
-        document.getElementById('inboundForm').addEventListener('submit', processInbound);
-        document.getElementById('outboundForm').addEventListener('submit', processOutbound);
-        document.getElementById('salesForm').addEventListener('submit', registerSale);
-        document.getElementById('analysisPeriod').addEventListener('change', updateAnalysis);
-        document.getElementById('salesProduct').addEventListener('change', updateCurrentStock);
+        const addProductForm = document.getElementById('addProductForm');
+        const inboundForm = document.getElementById('inboundForm');
+        const outboundForm = document.getElementById('outboundForm');
+        const salesForm = document.getElementById('salesForm');
+        const analysisPeriod = document.getElementById('analysisPeriod');
+        const salesProduct = document.getElementById('salesProduct');
+        
+        if (addProductForm) addProductForm.addEventListener('submit', addProduct);
+        if (inboundForm) inboundForm.addEventListener('submit', processInbound);
+        if (outboundForm) outboundForm.addEventListener('submit', processOutbound);
+        if (salesForm) salesForm.addEventListener('submit', registerSale);
+        if (analysisPeriod) analysisPeriod.addEventListener('change', updateAnalysis);
+        if (salesProduct) salesProduct.addEventListener('change', updateCurrentStock);
         
     } catch (error) {
         console.error('アプリケーション初期化エラー:', error);
