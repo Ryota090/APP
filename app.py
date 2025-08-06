@@ -53,7 +53,8 @@ SESSION_TIMEOUT = 7200  # 2時間
 
 # データベース初期化
 def init_database():
-    conn = sqlite3.connect('inventory.db')
+    db_path = os.environ.get('DATABASE_PATH', 'inventory.db')
+    conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
     
     # ユーザーテーブル
@@ -138,7 +139,8 @@ def verify_password(password, hashed):
             return bcrypt.checkpw(password.encode('utf-8'), hashed)
         else:
             return bcrypt.checkpw(password.encode('utf-8'), hashed.encode('utf-8'))
-    except:
+    except Exception as e:
+        print(f"パスワード検証エラー: {e}")
         return False
 
 def validate_input(text, max_length=100):
@@ -159,7 +161,8 @@ def validate_input(text, max_length=100):
 
 def check_rate_limit(ip_address, username):
     """レート制限チェック"""
-    conn = sqlite3.connect('inventory.db')
+    db_path = os.environ.get('DATABASE_PATH', 'inventory.db')
+    conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
     
     # 過去5分間の試行回数をチェック
@@ -176,7 +179,8 @@ def check_rate_limit(ip_address, username):
 
 def log_login_attempt(ip_address, username, success):
     """ログイン試行を記録"""
-    conn = sqlite3.connect('inventory.db')
+    db_path = os.environ.get('DATABASE_PATH', 'inventory.db')
+    conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
     cursor.execute("""
         INSERT INTO login_attempts (ip_address, username, success) 
@@ -218,6 +222,15 @@ def login():
         return redirect(url_for('index'))
     return render_template('login.html')
 
+# データベース初期化エンドポイント（開発用）
+@app.route('/api/init-db', methods=['POST'])
+def init_database_api():
+    try:
+        init_database()
+        return jsonify({'success': True, 'message': 'データベースが初期化されました'})
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'データベース初期化エラー: {str(e)}'})
+
 # ログイン処理
 @app.route('/api/login', methods=['POST'])
 @limiter.limit("5 per minute")
@@ -239,38 +252,61 @@ def login_api():
         log_login_attempt(request.remote_addr, username, False)
         return jsonify({'success': False, 'message': '無効な入力です'})
     
-    conn = sqlite3.connect('inventory.db')
-    cursor = conn.cursor()
-    cursor.execute("SELECT id, role, password_hash FROM users WHERE username = ?", (username,))
-    user = cursor.fetchone()
-    
-    if user and verify_password(password, user[2]):
-        # ログイン成功
-        session.permanent = True
-        session['user_id'] = user[0]
-        session['username'] = username
-        session['role'] = user[1]
-        session['login_time'] = datetime.now().isoformat()
+    try:
+        db_path = os.environ.get('DATABASE_PATH', 'inventory.db')
+        conn = sqlite3.connect(db_path)
+        cursor = conn.cursor()
         
-        # 最終ログイン時間を更新
-        cursor.execute("UPDATE users SET last_login = ? WHERE id = ?", (datetime.now(), user[0]))
-        conn.commit()
+        # データベースが空の場合は初期化
+        cursor.execute("SELECT COUNT(*) FROM users")
+        user_count = cursor.fetchone()[0]
         
-        log_login_attempt(request.remote_addr, username, True)
-        conn.close()
+        if user_count == 0:
+            init_database()
+            cursor.execute("SELECT COUNT(*) FROM users")
+            user_count = cursor.fetchone()[0]
         
-        return jsonify({
-            'success': True, 
-            'user': {
-                'id': user[0],
-                'username': username,
-                'role': user[1]
-            }
-        })
-    else:
-        log_login_attempt(request.remote_addr, username, False)
-        conn.close()
-        return jsonify({'success': False, 'message': 'ユーザー名またはパスワードが違います'})
+        cursor.execute("SELECT id, role, password_hash FROM users WHERE username = ?", (username,))
+        user = cursor.fetchone()
+        
+        if user:
+            # パスワード検証のデバッグ情報
+            password_valid = verify_password(password, user[2])
+            
+            if password_valid:
+                # ログイン成功
+                session.permanent = True
+                session['user_id'] = user[0]
+                session['username'] = username
+                session['role'] = user[1]
+                session['login_time'] = datetime.now().isoformat()
+                
+                # 最終ログイン時間を更新
+                cursor.execute("UPDATE users SET last_login = ? WHERE id = ?", (datetime.now(), user[0]))
+                conn.commit()
+                
+                log_login_attempt(request.remote_addr, username, True)
+                conn.close()
+                
+                return jsonify({
+                    'success': True, 
+                    'user': {
+                        'id': user[0],
+                        'username': username,
+                        'role': user[1]
+                    }
+                })
+            else:
+                log_login_attempt(request.remote_addr, username, False)
+                conn.close()
+                return jsonify({'success': False, 'message': 'パスワードが正しくありません'})
+        else:
+            log_login_attempt(request.remote_addr, username, False)
+            conn.close()
+            return jsonify({'success': False, 'message': 'ユーザーが見つかりません'})
+            
+    except Exception as e:
+        return jsonify({'success': False, 'message': f'ログイン処理エラー: {str(e)}'})
 
 # ログアウト
 @app.route('/api/logout', methods=['POST'])
@@ -282,7 +318,8 @@ def logout():
 @app.route('/api/dashboard', methods=['GET'])
 @login_required
 def get_dashboard_data():
-    conn = sqlite3.connect('inventory.db')
+    db_path = os.environ.get('DATABASE_PATH', 'inventory.db')
+    conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
     
     # 総商品数
@@ -327,7 +364,8 @@ def get_dashboard_data():
 @app.route('/api/products', methods=['GET'])
 @login_required
 def get_products():
-    conn = sqlite3.connect('inventory.db')
+    db_path = os.environ.get('DATABASE_PATH', 'inventory.db')
+    conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
     cursor.execute("SELECT id, sku, name, price, quantity FROM products ORDER BY name")
     products = cursor.fetchall()
@@ -359,7 +397,8 @@ def add_product():
         return jsonify({'success': False, 'message': '無効な入力です'})
     
     try:
-        conn = sqlite3.connect('inventory.db')
+        db_path = os.environ.get('DATABASE_PATH', 'inventory.db')
+        conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
         cursor.execute("INSERT INTO products (sku, name, price, quantity) VALUES (?, ?, ?, ?)", 
                       (sku, name, price, quantity))
@@ -382,7 +421,8 @@ def update_stock(product_id):
         return jsonify({'success': False, 'message': '数量を指定してください'})
     
     try:
-        conn = sqlite3.connect('inventory.db')
+        db_path = os.environ.get('DATABASE_PATH', 'inventory.db')
+        conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
         cursor.execute("UPDATE products SET quantity = ?, updated_at = ? WHERE id = ?", 
                       (quantity, datetime.now(), product_id))
@@ -405,7 +445,8 @@ def add_sale():
         return jsonify({'success': False, 'message': '必須項目を入力してください'})
     
     try:
-        conn = sqlite3.connect('inventory.db')
+        db_path = os.environ.get('DATABASE_PATH', 'inventory.db')
+        conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
         
         # 在庫チェック
@@ -437,7 +478,8 @@ def add_sale():
 def get_sales_analysis():
     period = request.args.get('period', '30')
     
-    conn = sqlite3.connect('inventory.db')
+    db_path = os.environ.get('DATABASE_PATH', 'inventory.db')
+    conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
     
     # 期間内の売上データ
@@ -498,7 +540,12 @@ def handle_exception(e):
     return jsonify({'error': f'予期しないエラーが発生しました: {str(e)}'}), 500
 
 if __name__ == '__main__':
-    init_database()
+    try:
+        init_database()
+        print("データベース初期化完了")
+    except Exception as e:
+        print(f"データベース初期化エラー: {e}")
+    
     port = int(os.environ.get('PORT', 5000))
     debug = os.environ.get('FLASK_DEBUG', 'false').lower() == 'true'
     app.run(host='0.0.0.0', port=port, debug=debug)
