@@ -93,10 +93,6 @@
             <button type="button" class="btn btn-outline-secondary btn-sm mt-2" onclick="initDatabase()">
                 データベース初期化
             </button>
-            <br>
-            <button type="button" class="btn btn-outline-info btn-sm mt-2" onclick="showPassword()">
-                パスワードを表示
-            </button>
         </div>
     </div>
 
@@ -128,12 +124,7 @@
             console.log('パスワード入力中:', this.value);
         });
         
-        // パスワード表示ボタンの機能
-        function showPassword() {
-            const passwordField = document.getElementById('password');
-            const currentValue = passwordField.value;
-            alert('現在入力されているパスワード: ' + (currentValue || '（未入力）'));
-        }
+
         document.getElementById('loginForm').addEventListener('submit', async function(e) {
             e.preventDefault();
             

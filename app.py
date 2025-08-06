@@ -17,7 +17,11 @@ print("=== Flaskアプリケーション初期化完了 ===")
 def init_database():
     try:
         print("=== データベース初期化開始 ===")
-        db_path = os.environ.get('DATABASE_PATH', 'inventory.db')
+        # Render環境では必ず/tmp/inventory.dbを使用
+        if os.environ.get('RENDER'):
+            db_path = '/tmp/inventory.db'
+        else:
+            db_path = os.environ.get('DATABASE_PATH', 'inventory.db')
         print(f"データベースパス: {db_path}")
         
         # データベースディレクトリの作成
@@ -130,7 +134,11 @@ def login_api():
         if not username or not password:
             return jsonify({'success': False, 'message': 'ユーザー名とパスワードを入力してください'})
         
-        db_path = os.environ.get('DATABASE_PATH', 'inventory.db')
+        # Render環境では必ず/tmp/inventory.dbを使用
+        if os.environ.get('RENDER'):
+            db_path = '/tmp/inventory.db'
+        else:
+            db_path = os.environ.get('DATABASE_PATH', 'inventory.db')
         print(f"データベースパス: {db_path}")
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
@@ -181,7 +189,10 @@ def init_database_api():
         init_database()
         
         # 初期化後の確認
-        db_path = os.environ.get('DATABASE_PATH', 'inventory.db')
+        if os.environ.get('RENDER'):
+            db_path = '/tmp/inventory.db'
+        else:
+            db_path = os.environ.get('DATABASE_PATH', 'inventory.db')
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
         cursor.execute("SELECT username, role FROM users")
@@ -200,7 +211,10 @@ def init_database_api():
 @login_required
 def dashboard():
     try:
-        db_path = os.environ.get('DATABASE_PATH', 'inventory.db')
+        if os.environ.get('RENDER'):
+            db_path = '/tmp/inventory.db'
+        else:
+            db_path = os.environ.get('DATABASE_PATH', 'inventory.db')
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
         
@@ -223,7 +237,10 @@ def dashboard():
 @login_required
 def get_products():
     try:
-        db_path = os.environ.get('DATABASE_PATH', 'inventory.db')
+        if os.environ.get('RENDER'):
+            db_path = '/tmp/inventory.db'
+        else:
+            db_path = os.environ.get('DATABASE_PATH', 'inventory.db')
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
         cursor.execute("SELECT id, sku, name, price, quantity FROM products")
@@ -247,7 +264,10 @@ def test():
 @app.route('/api/check-db')
 def check_database():
     try:
-        db_path = os.environ.get('DATABASE_PATH', 'inventory.db')
+        if os.environ.get('RENDER'):
+            db_path = '/tmp/inventory.db'
+        else:
+            db_path = os.environ.get('DATABASE_PATH', 'inventory.db')
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
         
