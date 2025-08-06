@@ -32,8 +32,18 @@ def hash_password(password):
     return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())
 
 def verify_password(password, hashed):
-    """パスワード検証"""
-    return bcrypt.checkpw(password.encode('utf-8'), hashed)
+    """パスワード検証（古いSHA256形式と新しいbcrypt形式に対応）"""
+    try:
+        # 新しいbcrypt形式を試行
+        if isinstance(hashed, bytes):
+            return bcrypt.checkpw(password.encode('utf-8'), hashed)
+        else:
+            return bcrypt.checkpw(password.encode('utf-8'), hashed.encode('utf-8'))
+    except (TypeError, ValueError):
+        # 古いSHA256形式の場合
+        import hashlib
+        old_hash = hashlib.sha256(password.encode()).hexdigest()
+        return old_hash == hashed
 
 def validate_input(text, max_length=100):
     """入力値検証"""
@@ -102,6 +112,15 @@ def init_database():
         ]
         cursor.executemany("INSERT INTO products (sku, name, price, quantity) VALUES (?, ?, ?, ?)", 
                           sample_products)
+    else:
+        # 既存のユーザーのパスワードハッシュを新しい形式に更新
+        cursor.execute("SELECT id, password_hash FROM users")
+        users = cursor.fetchall()
+        for user_id, old_hash in users:
+            if len(old_hash) == 64:  # SHA256ハッシュの長さ
+                # デフォルトパスワードで新しいハッシュを作成
+                new_hash = hash_password("Admin@2024!")
+                cursor.execute("UPDATE users SET password_hash = ? WHERE id = ?", (new_hash, user_id))
     conn.commit()
     conn.close()
 
@@ -123,15 +142,24 @@ def login_user(username, password):
     cursor = conn.cursor()
     cursor.execute("SELECT id, role, password_hash FROM users WHERE username = ?", (username,))
     user = cursor.fetchone()
-    conn.close()
     
-    if user and verify_password(password, user[2]):
-        st.session_state.login_attempts = 0
-        return (user[0], user[1])
-    else:
-        st.session_state.login_attempts += 1
-        st.session_state.last_attempt_time = time.time()
-        return None
+    if user:
+        # パスワード検証
+        if verify_password(password, user[2]):
+            # 古いハッシュ形式の場合、新しい形式に更新
+            if len(user[2]) == 64:  # SHA256ハッシュの長さ
+                new_hash = hash_password(password)
+                cursor.execute("UPDATE users SET password_hash = ? WHERE id = ?", (new_hash, user[0]))
+                conn.commit()
+            
+            st.session_state.login_attempts = 0
+            conn.close()
+            return (user[0], user[1])
+    
+    conn.close()
+    st.session_state.login_attempts += 1
+    st.session_state.last_attempt_time = time.time()
+    return None
 
 def signup_user(username, password, role="staff"):
     """新規ユーザー登録（管理者専用）"""
