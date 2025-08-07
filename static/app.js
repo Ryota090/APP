@@ -407,6 +407,8 @@ function updateAnalysisTable(salesHistory) {
 async function addProduct(event) {
     event.preventDefault();
     
+    console.log("=== 商品登録開始 ===");
+    
     const formData = {
         sku: document.getElementById('newSku').value,
         name: document.getElementById('newName').value,
@@ -414,7 +416,23 @@ async function addProduct(event) {
         quantity: parseInt(document.getElementById('newQuantity').value)
     };
     
+    console.log("フォームデータ:", formData);
+    
+    // 入力値の検証
+    if (!formData.sku || !formData.name || !formData.price || !formData.quantity) {
+        console.error("必須項目が不足しています");
+        alert('すべての項目を入力してください');
+        return;
+    }
+    
+    if (formData.price <= 0 || formData.quantity < 0) {
+        console.error("価格または数量が無効です");
+        alert('価格は0より大きく、数量は0以上で入力してください');
+        return;
+    }
+    
     try {
+        console.log("APIリクエスト送信中...");
         const response = await fetch('/api/products', {
             method: 'POST',
             headers: {
@@ -423,11 +441,15 @@ async function addProduct(event) {
             body: JSON.stringify(formData)
         });
         
+        console.log("レスポンス受信:", response.status);
+        
         if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
         }
         
         const result = await response.json();
+        console.log("API結果:", result);
+        
         if (result.success) {
             alert('商品が登録されました');
             document.getElementById('addProductForm').reset();
@@ -438,7 +460,7 @@ async function addProduct(event) {
         }
     } catch (error) {
         console.error('商品追加エラー:', error);
-        alert('商品追加エラーが発生しました');
+        alert('商品追加エラーが発生しました: ' + error.message);
     }
 }
 

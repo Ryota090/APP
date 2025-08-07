@@ -367,13 +367,22 @@ def get_products():
 @login_required
 def add_product():
     try:
+        print("=== 商品登録開始 ===")
         data = request.get_json()
+        print(f"受信データ: {data}")
+        
         sku = data.get('sku')
         name = data.get('name')
         price = data.get('price')
         quantity = data.get('quantity')
         
+        print(f"SKU: {sku}")
+        print(f"商品名: {name}")
+        print(f"価格: {price}")
+        print(f"数量: {quantity}")
+        
         if not all([sku, name, price, quantity]):
+            print("必須項目が不足しています")
             return jsonify({'success': False, 'message': 'すべての項目を入力してください'})
         
         if os.environ.get('RENDER'):
@@ -381,18 +390,27 @@ def add_product():
         else:
             db_path = os.environ.get('DATABASE_PATH', 'inventory.db')
         
+        print(f"データベースパス: {db_path}")
+        
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
+        
+        print("データベース接続成功")
         
         cursor.execute("INSERT INTO products (sku, name, price, quantity) VALUES (?, ?, ?, ?)", 
                       (sku, name, price, quantity))
         conn.commit()
         conn.close()
         
+        print("商品登録成功")
         return jsonify({'success': True, 'message': '商品が追加されました'})
-    except sqlite3.IntegrityError:
+    except sqlite3.IntegrityError as e:
+        print(f"IntegrityError: {e}")
         return jsonify({'success': False, 'message': 'SKUが既に存在します'})
     except Exception as e:
+        print(f"商品登録エラー: {e}")
+        import traceback
+        print(f"エラー詳細: {traceback.format_exc()}")
         return jsonify({'success': False, 'message': f'エラー: {str(e)}'})
 
 @app.route('/api/inventory/inbound', methods=['POST'])
