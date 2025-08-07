@@ -606,6 +606,29 @@ def check_database():
     except Exception as e:
         return jsonify({'status': 'error', 'message': str(e)})
 
+@app.route('/api/check-user-status')
+def check_user_status():
+    """ユーザーの認証状態を確認するAPI"""
+    try:
+        if 'user_id' in session:
+            return jsonify({
+                'authenticated': True,
+                'user_id': session.get('user_id'),
+                'username': session.get('username'),
+                'role': session.get('role')
+            })
+        else:
+            return jsonify({
+                'authenticated': False,
+                'message': 'ユーザーがログインしていません'
+            })
+    except Exception as e:
+        print(f"ユーザー状態確認エラー: {e}")
+        return jsonify({
+            'authenticated': False,
+            'error': str(e)
+        })
+
 @app.route('/static/<path:filename>')
 def static_files(filename):
     return send_from_directory('static', filename)
