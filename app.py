@@ -319,6 +319,7 @@ def get_products():
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/products', methods=['POST'])
+@login_required
 def add_product():
     try:
         print("=== 商品登録開始 ===")

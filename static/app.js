@@ -64,6 +64,12 @@ function initializeTooltips() {
 
 // 検索機能
 function searchProducts() {
+    // ゲストユーザーチェック
+    if (!document.cookie.includes('session')) {
+        showGuestWarning();
+        return;
+    }
+    
     const searchTerm = document.getElementById('productSearch').value.toLowerCase();
     const searchCategory = document.getElementById('searchCategory').value;
     
@@ -91,6 +97,12 @@ function searchProducts() {
 
 // 検索クリア
 function clearSearch() {
+    // ゲストユーザーチェック
+    if (!document.cookie.includes('session')) {
+        showGuestWarning();
+        return;
+    }
+    
     document.getElementById('productSearch').value = '';
     document.getElementById('searchCategory').value = 'all';
     appData.filteredProducts = appData.products;
@@ -490,9 +502,20 @@ function updateAnalysisTable(salesHistory) {
     });
 }
 
-// 商品追加
+// ゲストユーザー警告
+function showGuestWarning() {
+    alert('この機能はログインが必要です。\n\nゲストユーザーは以下の機能のみ利用可能です：\n• ダッシュボードの閲覧\n• 商品一覧の閲覧\n\n操作するにはログインしてください。');
+}
+
+// 商品登録（ゲストユーザー制限）
 async function addProduct(event) {
     event.preventDefault();
+    
+    // ゲストユーザーチェック
+    if (!document.cookie.includes('session')) {
+        showGuestWarning();
+        return;
+    }
     
     console.log("=== 商品登録開始 ===");
     
@@ -580,6 +603,12 @@ async function addProduct(event) {
 async function processInbound(event) {
     event.preventDefault();
     
+    // ゲストユーザーチェック
+    if (!document.cookie.includes('session')) {
+        showGuestWarning();
+        return;
+    }
+    
     const formData = {
         product_id: document.getElementById('inboundProduct').value,
         quantity: parseInt(document.getElementById('inboundQuantity').value)
@@ -617,6 +646,12 @@ async function processInbound(event) {
 async function processOutbound(event) {
     event.preventDefault();
     
+    // ゲストユーザーチェック
+    if (!document.cookie.includes('session')) {
+        showGuestWarning();
+        return;
+    }
+    
     const formData = {
         product_id: document.getElementById('outboundProduct').value,
         quantity: parseInt(document.getElementById('outboundQuantity').value)
@@ -625,27 +660,27 @@ async function processOutbound(event) {
     try {
         const response = await fetch('/api/inventory/outbound', {
             method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
+            headers: {
+                'Content-Type': 'application/json',
+            },
             body: JSON.stringify(formData)
-            });
-            
+        });
+        
         if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
         }
-            
+        
         const result = await response.json();
         if (result.success) {
-                alert('出庫処理が完了しました');
-                document.getElementById('outboundForm').reset();
+            alert('出庫処理が完了しました');
+            document.getElementById('outboundForm').reset();
             updateProductList();
-                updateDashboard();
-            } else {
+            updateDashboard();
+        } else {
             alert('出庫処理に失敗しました: ' + result.message);
-            }
-        } catch (error) {
-            console.error('出庫処理エラー:', error);
+        }
+    } catch (error) {
+        console.error('出庫処理エラー:', error);
         alert('出庫処理エラーが発生しました');
     }
 }
@@ -653,6 +688,12 @@ async function processOutbound(event) {
 // 売上登録
 async function registerSale(event) {
     event.preventDefault();
+    
+    // ゲストユーザーチェック
+    if (!document.cookie.includes('session')) {
+        showGuestWarning();
+        return;
+    }
     
     const formData = {
         product_id: document.getElementById('salesProduct').value,
@@ -677,6 +718,7 @@ async function registerSale(event) {
         if (result.success) {
             alert('売上が登録されました');
             document.getElementById('salesForm').reset();
+            updateProductList();
             updateDashboard();
             updateSalesHistory();
         } else {
@@ -945,13 +987,67 @@ function checkUserStatus() {
         guestBanner.classList.remove('hidden');
     }
     
-    // ゲストユーザーの場合は一部機能を制限（商品登録は許可）
+    // ゲストユーザーの場合はすべての操作機能を制限
     if (isGuest) {
-        // 編集・削除ボタンを非表示（商品登録は許可）
+        // 商品登録フォームを非表示
+        const addProductForm = document.querySelector('.form-container');
+        if (addProductForm) {
+            addProductForm.style.display = 'none';
+        }
+        
+        // 編集・削除ボタンを非表示
         const editButtons = document.querySelectorAll('.btn-outline-primary, .btn-outline-danger');
         editButtons.forEach(button => {
             button.style.display = 'none';
         });
+        
+        // 入庫・出庫フォームを非表示
+        const inventoryForms = document.querySelectorAll('#inboundTab .form-container, #outboundTab .form-container');
+        inventoryForms.forEach(form => {
+            form.style.display = 'none';
+        });
+        
+        // 売上登録フォームを非表示
+        const salesForm = document.querySelector('#salesPage .form-container');
+        if (salesForm) {
+            salesForm.style.display = 'none';
+        }
+        
+        // 一括更新・エクスポートボタンを非表示
+        const actionButtons = document.querySelectorAll('.btn-outline-warning, .btn-outline-info');
+        actionButtons.forEach(button => {
+            button.style.display = 'none';
+        });
+        
+        // 検索機能を無効化
+        const searchInput = document.getElementById('productSearch');
+        const searchCategory = document.getElementById('searchCategory');
+        const clearButton = document.querySelector('button[onclick="clearSearch()"]');
+        
+        if (searchInput) {
+            searchInput.disabled = true;
+            searchInput.placeholder = 'ログインが必要です';
+        }
+        if (searchCategory) {
+            searchCategory.disabled = true;
+        }
+        if (clearButton) {
+            clearButton.disabled = true;
+        }
+        
+        // ナビゲーションの一部を無効化
+        const navLinks = document.querySelectorAll('.nav-link');
+        navLinks.forEach(link => {
+            if (link.textContent.includes('商品管理') || 
+                link.textContent.includes('在庫管理') || 
+                link.textContent.includes('売上管理') ||
+                link.textContent.includes('分析')) {
+                link.style.opacity = '0.5';
+                link.style.pointerEvents = 'none';
+            }
+        });
+        
+        console.log('ゲストユーザー: すべての操作機能を制限しました');
     }
 }
 
