@@ -88,9 +88,15 @@
         </form>
         
         <div class="mt-3 text-center">
-            <button type="button" class="btn btn-outline-secondary btn-sm mt-2" onclick="initDatabase()">
-                データベース初期化
-            </button>
+            <div class="d-grid gap-2">
+                <button type="button" class="btn btn-outline-success" onclick="guestLogin()" 
+                        data-bs-toggle="tooltip" data-bs-placement="top" title="ログインせずに基本的な機能を利用できます">
+                    <i class="fas fa-user-friends me-2"></i>ゲストとして利用
+                </button>
+                <button type="button" class="btn btn-outline-secondary btn-sm mt-2" onclick="initDatabase()">
+                    データベース初期化
+                </button>
+            </div>
         </div>
     </div>
 
@@ -163,6 +169,17 @@
             `;
         }
         
+        async function guestLogin() {
+            try {
+                showAlert('info', 'ゲストとしてログイン中...');
+                setTimeout(() => {
+                    window.location.href = '/';
+                }, 1000);
+            } catch (error) {
+                showAlert('danger', 'ゲストログインエラーが発生しました');
+            }
+        }
+        
         async function initDatabase() {
             try {
                 const response = await fetch('/api/init-db', {
@@ -183,6 +200,14 @@
                 showAlert('danger', 'データベース初期化エラーが発生しました');
             }
         }
+        
+        // ツールチップ初期化
+        document.addEventListener('DOMContentLoaded', function() {
+            const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+            tooltipTriggerList.map(function (tooltipTriggerEl) {
+                return new bootstrap.Tooltip(tooltipTriggerEl);
+            });
+        });
     </script>
 </body>
 </html> 

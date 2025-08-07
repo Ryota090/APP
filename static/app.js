@@ -5,7 +5,8 @@ let appData = {
     user: null,
     charts: {},
     autoRefreshInterval: null,
-    autoRefreshEnabled: false
+    autoRefreshEnabled: false,
+    filteredProducts: [] // 検索結果を保存
 };
 
 // ページ表示制御
@@ -46,6 +47,114 @@ function showPage(pageName, event) {
         case 'analysis':
             updateAnalysisPage();
             break;
+    }
+    
+    // ツールチップを初期化
+    initializeTooltips();
+}
+
+// ツールチップ初期化
+function initializeTooltips() {
+    // 既存のツールチップを破棄
+    const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+    tooltipTriggerList.map(function (tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl);
+    });
+}
+
+// 検索機能
+function searchProducts() {
+    const searchTerm = document.getElementById('productSearch').value.toLowerCase();
+    const searchCategory = document.getElementById('searchCategory').value;
+    
+    if (!searchTerm) {
+        appData.filteredProducts = appData.products;
+    } else {
+        appData.filteredProducts = appData.products.filter(product => {
+            switch(searchCategory) {
+                case 'name':
+                    return product.name && product.name.toLowerCase().includes(searchTerm);
+                case 'sku':
+                    return product.sku && product.sku.toLowerCase().includes(searchTerm);
+                case 'price':
+                    return product.price && product.price.toString().includes(searchTerm);
+                default:
+                    return (product.name && product.name.toLowerCase().includes(searchTerm)) ||
+                           (product.sku && product.sku.toLowerCase().includes(searchTerm)) ||
+                           (product.price && product.price.toString().includes(searchTerm));
+            }
+        });
+    }
+    
+    displayProducts(appData.filteredProducts);
+}
+
+// 検索クリア
+function clearSearch() {
+    document.getElementById('productSearch').value = '';
+    document.getElementById('searchCategory').value = 'all';
+    appData.filteredProducts = appData.products;
+    displayProducts(appData.products);
+}
+
+// 商品表示
+function displayProducts(products) {
+    const tbody = document.getElementById('productTableBody');
+    if (tbody) {
+        tbody.innerHTML = '';
+        
+        if (products.length === 0) {
+            tbody.innerHTML = `
+                <tr>
+                    <td colspan="5" class="text-center text-muted">
+                        <i class="fas fa-search me-2"></i>商品が見つかりませんでした
+                    </td>
+                </tr>
+            `;
+            return;
+        }
+        
+        products.forEach(product => {
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td>
+                    <span data-bs-toggle="tooltip" data-bs-placement="top" title="SKU: ${product.sku}">
+                        ${product.sku || ''}
+                    </span>
+                </td>
+                <td>
+                    <span data-bs-toggle="tooltip" data-bs-placement="top" title="商品名: ${product.name}">
+                        ${product.name || ''}
+                    </span>
+                </td>
+                <td>
+                    <span data-bs-toggle="tooltip" data-bs-placement="top" title="価格: ¥${(product.price || 0).toLocaleString()}">
+                        ¥${(product.price || 0).toLocaleString()}
+                    </span>
+                </td>
+                <td>
+                    <span class="badge ${product.quantity < 10 ? 'bg-danger' : product.quantity < 50 ? 'bg-warning' : 'bg-success'}" 
+                          data-bs-toggle="tooltip" data-bs-placement="top" 
+                          title="${product.quantity < 10 ? '在庫不足' : product.quantity < 50 ? '在庫注意' : '在庫充足'}">
+                        ${product.quantity || 0}点
+                    </span>
+                </td>
+                <td>
+                    <button class="btn btn-sm btn-outline-primary me-1" onclick="editProduct(${product.id})"
+                            data-bs-toggle="tooltip" data-bs-placement="top" title="商品を編集">
+                        <i class="fas fa-edit"></i>
+                    </button>
+                    <button class="btn btn-sm btn-outline-danger" onclick="deleteProduct(${product.id})"
+                            data-bs-toggle="tooltip" data-bs-placement="top" title="商品を削除">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </td>
+            `;
+            tbody.appendChild(row);
+        });
+        
+        // 新しいツールチップを初期化
+        initializeTooltips();
     }
 }
 
@@ -109,7 +218,6 @@ async function updateDashboard() {
     }
 }
 
-// 商品一覧更新
 async function updateProductList() {
     try {
         const response = await fetch('/api/products');
@@ -118,30 +226,9 @@ async function updateProductList() {
         }
         const products = await response.json();
         appData.products = products;
+        appData.filteredProducts = products;
         
-        const tbody = document.getElementById('productTableBody');
-        if (tbody) {
-        tbody.innerHTML = '';
-        
-        products.forEach(product => {
-            const row = document.createElement('tr');
-            row.innerHTML = `
-                    <td>${product.sku || ''}</td>
-                    <td>${product.name || ''}</td>
-                    <td>¥${(product.price || 0).toLocaleString()}</td>
-                    <td>${product.quantity || 0}点</td>
-                <td>
-                    <button class="btn btn-sm btn-outline-primary" onclick="editProduct(${product.id})">
-                        <i class="fas fa-edit"></i>
-                    </button>
-                        <button class="btn btn-sm btn-outline-danger" onclick="deleteProduct(${product.id})">
-                            <i class="fas fa-trash"></i>
-                        </button>
-                </td>
-            `;
-            tbody.appendChild(row);
-        });
-        }
+        displayProducts(products);
     } catch (error) {
         console.error('商品一覧更新エラー:', error);
     }
@@ -777,6 +864,9 @@ async function deleteProduct(productId) {
 // 初期化
 async function initializeApp() {
     try {
+        // ゲストユーザー判定
+        checkUserStatus();
+        
         // 初期データ読み込み
         await updateDashboard();
         await updateProductList();
@@ -800,8 +890,49 @@ async function initializeApp() {
             salesForm.addEventListener('submit', registerSale);
         }
         
+        // 検索機能のイベントリスナー
+        const productSearch = document.getElementById('productSearch');
+        const searchCategory = document.getElementById('searchCategory');
+        
+        if (productSearch) {
+            productSearch.addEventListener('input', searchProducts);
+        }
+        if (searchCategory) {
+            searchCategory.addEventListener('change', searchProducts);
+        }
+        
+        // ツールチップ初期化
+        initializeTooltips();
+        
+        console.log('アプリケーション初期化完了');
     } catch (error) {
         console.error('アプリケーション初期化エラー:', error);
+    }
+}
+
+// ユーザー状態チェック
+function checkUserStatus() {
+    // セッション情報を確認（簡易的な実装）
+    const isGuest = !document.cookie.includes('session');
+    const guestBanner = document.getElementById('guestBanner');
+    
+    if (isGuest && guestBanner) {
+        guestBanner.classList.remove('hidden');
+    }
+    
+    // ゲストユーザーの場合は一部機能を制限
+    if (isGuest) {
+        // 商品登録フォームを非表示
+        const addProductForm = document.querySelector('.form-container');
+        if (addProductForm) {
+            addProductForm.style.display = 'none';
+        }
+        
+        // 編集・削除ボタンを非表示
+        const editButtons = document.querySelectorAll('.btn-outline-primary, .btn-outline-danger');
+        editButtons.forEach(button => {
+            button.style.display = 'none';
+        });
     }
 }
 

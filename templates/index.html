@@ -100,9 +100,21 @@
         .kpi-card {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: white;
-            border-radius: 15px;
-            padding: 20px;
+        }
+        .tooltip {
+            font-size: 0.875rem;
+        }
+        .guest-banner {
+            background: linear-gradient(135deg, #28a745 0%, #20c997 100%);
+            color: white;
+            padding: 10px 20px;
+            border-radius: 10px;
             margin-bottom: 20px;
+        }
+        .search-highlight {
+            background-color: #fff3cd;
+            padding: 2px 4px;
+            border-radius: 3px;
         }
         .sales-item {
             background: #f8f9fa;
@@ -157,19 +169,22 @@
             <div class="col-md-9 col-lg-10 main-content p-4">
                 <!-- ダッシュボード -->
                 <div id="dashboardPage">
-                    <div class="d-flex justify-content-between align-items-center mb-4">
-                        <h2 class="mb-0"><i class="fas fa-chart-line me-2"></i>ダッシュボード</h2>
-                        <div>
-                            <button type="button" class="btn btn-outline-primary btn-sm me-2" onclick="updateDashboard()">
-                                <i class="fas fa-sync-alt me-1"></i>更新
-                            </button>
-                            <button type="button" class="btn btn-outline-success btn-sm" onclick="toggleAutoRefresh()">
-                                <i class="fas fa-clock me-1"></i><span id="autoRefreshText">自動更新OFF</span>
+                    <!-- ゲストユーザーバナー -->
+                    <div id="guestBanner" class="guest-banner hidden">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <div>
+                                <i class="fas fa-user-friends me-2"></i>
+                                <strong>ゲストユーザー</strong> - 基本的な機能を利用できます
+                            </div>
+                            <button type="button" class="btn btn-outline-light btn-sm" onclick="window.location.href='/login'">
+                                <i class="fas fa-sign-in-alt me-1"></i>ログイン
                             </button>
                         </div>
                     </div>
                     
-                    <!-- KPI カード -->
+                    <h2 class="mb-4"><i class="fas fa-tachometer-alt me-2"></i>ダッシュボード</h2>
+                    
+                    <!-- KPIカード -->
                     <div class="row mb-4">
                         <div class="col-md-3 mb-3">
                             <div class="kpi-card">
@@ -272,22 +287,56 @@
                         <div class="d-flex justify-content-between align-items-center mb-3">
                             <h5 class="mb-0">商品一覧</h5>
                             <div>
-                                <button type="button" class="btn btn-outline-warning btn-sm me-2" onclick="bulkUpdateStock()">
+                                <button type="button" class="btn btn-outline-warning btn-sm me-2" onclick="bulkUpdateStock()" 
+                                        data-bs-toggle="tooltip" data-bs-placement="top" title="複数の商品の在庫を一括で更新します">
                                     <i class="fas fa-edit me-1"></i>一括在庫更新
                                 </button>
-                                <button type="button" class="btn btn-outline-info btn-sm" onclick="exportProducts()">
+                                <button type="button" class="btn btn-outline-info btn-sm" onclick="exportProducts()"
+                                        data-bs-toggle="tooltip" data-bs-placement="top" title="商品データをCSVファイルとしてダウンロードします">
                                     <i class="fas fa-download me-1"></i>商品エクスポート
                                 </button>
                             </div>
                         </div>
+                        
+                        <!-- 検索機能 -->
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <div class="input-group">
+                                    <span class="input-group-text">
+                                        <i class="fas fa-search"></i>
+                                    </span>
+                                    <input type="text" class="form-control" id="productSearch" 
+                                           placeholder="商品名、SKU、価格で検索..." 
+                                           data-bs-toggle="tooltip" data-bs-placement="top" 
+                                           title="商品名、SKU、価格を入力して検索できます">
+                                </div>
+                            </div>
+                            <div class="col-md-3">
+                                <select class="form-select" id="searchCategory" 
+                                        data-bs-toggle="tooltip" data-bs-placement="top" 
+                                        title="検索するカテゴリを選択してください">
+                                    <option value="all">すべて</option>
+                                    <option value="name">商品名</option>
+                                    <option value="sku">SKU</option>
+                                    <option value="price">価格</option>
+                                </select>
+                            </div>
+                            <div class="col-md-3">
+                                <button type="button" class="btn btn-outline-secondary w-100" onclick="clearSearch()"
+                                        data-bs-toggle="tooltip" data-bs-placement="top" title="検索条件をクリアします">
+                                    <i class="fas fa-times me-1"></i>クリア
+                                </button>
+                            </div>
+                        </div>
+                        
                         <table class="table table-hover">
                             <thead>
                                 <tr>
-                                    <th>SKU</th>
-                                    <th>商品名</th>
-                                    <th>価格</th>
-                                    <th>在庫数</th>
-                                    <th>操作</th>
+                                    <th>SKU <i class="fas fa-info-circle text-muted" data-bs-toggle="tooltip" data-bs-placement="top" title="商品の一意の識別コード"></i></th>
+                                    <th>商品名 <i class="fas fa-info-circle text-muted" data-bs-toggle="tooltip" data-bs-placement="top" title="商品の名称"></i></th>
+                                    <th>価格 <i class="fas fa-info-circle text-muted" data-bs-toggle="tooltip" data-bs-placement="top" title="商品の価格（円）"></i></th>
+                                    <th>在庫数 <i class="fas fa-info-circle text-muted" data-bs-toggle="tooltip" data-bs-placement="top" title="現在の在庫数量"></i></th>
+                                    <th>操作 <i class="fas fa-info-circle text-muted" data-bs-toggle="tooltip" data-bs-placement="top" title="商品の編集・削除操作"></i></th>
                                 </tr>
                             </thead>
                             <tbody id="productTableBody"></tbody>
