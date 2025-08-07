@@ -496,27 +496,52 @@ async function addProduct(event) {
     
     console.log("=== 商品登録開始 ===");
     
-    const formData = {
-        sku: document.getElementById('newSku').value,
-        name: document.getElementById('newName').value,
-        price: parseInt(document.getElementById('newPrice').value),
-        quantity: parseInt(document.getElementById('newQuantity').value)
-    };
+    const sku = document.getElementById('newSku').value.trim();
+    const name = document.getElementById('newName').value.trim();
+    const priceInput = document.getElementById('newPrice').value;
+    const quantityInput = document.getElementById('newQuantity').value;
     
-    console.log("フォームデータ:", formData);
+    console.log("入力値:", { sku, name, price: priceInput, quantity: quantityInput });
     
     // 入力値の検証
-    if (!formData.sku || !formData.name || !formData.price || !formData.quantity) {
-        console.error("必須項目が不足しています");
-        alert('すべての項目を入力してください');
+    if (!sku) {
+        alert('SKUを入力してください');
+        document.getElementById('newSku').focus();
+        return;
+    }
+    if (!name) {
+        alert('商品名を入力してください');
+        document.getElementById('newName').focus();
+        return;
+    }
+    if (!priceInput) {
+        alert('価格を入力してください');
+        document.getElementById('newPrice').focus();
+        return;
+    }
+    if (!quantityInput) {
+        alert('数量を入力してください');
+        document.getElementById('newQuantity').focus();
         return;
     }
     
-    if (formData.price <= 0 || formData.quantity < 0) {
-        console.error("価格または数量が無効です");
-        alert('価格は0より大きく、数量は0以上で入力してください');
+    // 数値変換と検証
+    const price = parseInt(priceInput);
+    const quantity = parseInt(quantityInput);
+    
+    if (isNaN(price) || price <= 0) {
+        alert('価格は0より大きい数値を入力してください');
+        document.getElementById('newPrice').focus();
         return;
     }
+    if (isNaN(quantity) || quantity < 0) {
+        alert('数量は0以上の数値を入力してください');
+        document.getElementById('newQuantity').focus();
+        return;
+    }
+    
+    const formData = { sku, name, price, quantity };
+    console.log("送信データ:", formData);
     
     try {
         console.log("APIリクエスト送信中...");
@@ -920,15 +945,9 @@ function checkUserStatus() {
         guestBanner.classList.remove('hidden');
     }
     
-    // ゲストユーザーの場合は一部機能を制限
+    // ゲストユーザーの場合は一部機能を制限（商品登録は許可）
     if (isGuest) {
-        // 商品登録フォームを非表示
-        const addProductForm = document.querySelector('.form-container');
-        if (addProductForm) {
-            addProductForm.style.display = 'none';
-        }
-        
-        // 編集・削除ボタンを非表示
+        // 編集・削除ボタンを非表示（商品登録は許可）
         const editButtons = document.querySelectorAll('.btn-outline-primary, .btn-outline-danger');
         editButtons.forEach(button => {
             button.style.display = 'none';

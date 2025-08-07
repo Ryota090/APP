@@ -319,15 +319,17 @@ def get_products():
         return jsonify({'error': str(e)}), 500
 
 @app.route('/api/products', methods=['POST'])
-@login_required
 def add_product():
     try:
         print("=== 商品登録開始 ===")
         data = request.get_json()
         print(f"受信データ: {data}")
         
-        sku = data.get('sku')
-        name = data.get('name')
+        if not data:
+            return jsonify({'success': False, 'message': 'データが送信されていません'})
+        
+        sku = data.get('sku', '').strip()
+        name = data.get('name', '').strip()
         price = data.get('price')
         quantity = data.get('quantity')
         
@@ -336,9 +338,26 @@ def add_product():
         print(f"価格: {price}")
         print(f"数量: {quantity}")
         
-        if not all([sku, name, price, quantity]):
-            print("必須項目が不足しています")
-            return jsonify({'success': False, 'message': 'すべての項目を入力してください'})
+        # 必須項目チェック
+        if not sku:
+            return jsonify({'success': False, 'message': 'SKUを入力してください'})
+        if not name:
+            return jsonify({'success': False, 'message': '商品名を入力してください'})
+        if price is None or price == '':
+            return jsonify({'success': False, 'message': '価格を入力してください'})
+        if quantity is None or quantity == '':
+            return jsonify({'success': False, 'message': '数量を入力してください'})
+        
+        # 価格と数量の妥当性チェック
+        try:
+            price = int(price)
+            quantity = int(quantity)
+            if price <= 0:
+                return jsonify({'success': False, 'message': '価格は0より大きい値を入力してください'})
+            if quantity < 0:
+                return jsonify({'success': False, 'message': '数量は0以上の値を入力してください'})
+        except (ValueError, TypeError):
+            return jsonify({'success': False, 'message': '価格と数量は数値で入力してください'})
         
         if os.environ.get('RENDER'):
             db_path = '/tmp/inventory.db'
@@ -347,10 +366,21 @@ def add_product():
         
         print(f"データベースパス: {db_path}")
         
+        # データベースファイルの存在確認
+        if not os.path.exists(db_path):
+            print(f"データベースファイルが存在しません: {db_path}")
+            return jsonify({'success': False, 'message': 'データベースが初期化されていません。データベース初期化ボタンをクリックしてください。'})
+        
         conn = sqlite3.connect(db_path)
         cursor = conn.cursor()
         
         print("データベース接続成功")
+        
+        # SKUの重複チェック
+        cursor.execute("SELECT COUNT(*) FROM products WHERE sku = ?", (sku,))
+        if cursor.fetchone()[0] > 0:
+            conn.close()
+            return jsonify({'success': False, 'message': f'SKU "{sku}" は既に存在します'})
         
         cursor.execute("INSERT INTO products (sku, name, price, quantity) VALUES (?, ?, ?, ?)", 
                       (sku, name, price, quantity))
