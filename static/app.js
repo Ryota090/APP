@@ -26,7 +26,7 @@ function showPage(pageName, event) {
         link.classList.remove('active');
     });
     if (event && event.target) {
-        event.target.classList.add('active');
+    event.target.classList.add('active');
     }
     
     // ページに応じた初期化
@@ -121,26 +121,26 @@ async function updateProductList() {
         
         const tbody = document.getElementById('productTableBody');
         if (tbody) {
-            tbody.innerHTML = '';
-            
-            products.forEach(product => {
-                const row = document.createElement('tr');
-                row.innerHTML = `
+        tbody.innerHTML = '';
+        
+        products.forEach(product => {
+            const row = document.createElement('tr');
+            row.innerHTML = `
                     <td>${product.sku || ''}</td>
                     <td>${product.name || ''}</td>
                     <td>¥${(product.price || 0).toLocaleString()}</td>
                     <td>${product.quantity || 0}点</td>
-                    <td>
-                        <button class="btn btn-sm btn-outline-primary" onclick="editProduct(${product.id})">
-                            <i class="fas fa-edit"></i>
-                        </button>
+                <td>
+                    <button class="btn btn-sm btn-outline-primary" onclick="editProduct(${product.id})">
+                        <i class="fas fa-edit"></i>
+                    </button>
                         <button class="btn btn-sm btn-outline-danger" onclick="deleteProduct(${product.id})">
                             <i class="fas fa-trash"></i>
                         </button>
-                    </td>
-                `;
-                tbody.appendChild(row);
-            });
+                </td>
+            `;
+            tbody.appendChild(row);
+        });
         }
     } catch (error) {
         console.error('商品一覧更新エラー:', error);
@@ -491,27 +491,27 @@ async function processOutbound(event) {
     try {
         const response = await fetch('/api/inventory/outbound', {
             method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
+                headers: {
+                    'Content-Type': 'application/json',
+                },
             body: JSON.stringify(formData)
-        });
-        
+            });
+            
         if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
         }
-        
+            
         const result = await response.json();
         if (result.success) {
-            alert('出庫処理が完了しました');
-            document.getElementById('outboundForm').reset();
+                alert('出庫処理が完了しました');
+                document.getElementById('outboundForm').reset();
             updateProductList();
-            updateDashboard();
-        } else {
+                updateDashboard();
+            } else {
             alert('出庫処理に失敗しました: ' + result.message);
-        }
-    } catch (error) {
-        console.error('出庫処理エラー:', error);
+            }
+        } catch (error) {
+            console.error('出庫処理エラー:', error);
         alert('出庫処理エラーが発生しました');
     }
 }
@@ -743,7 +743,7 @@ async function deleteProduct(productId) {
             alert('商品が削除されました');
             updateProductList();
             updateDashboard();
-        } else {
+    } else {
             alert('商品削除に失敗しました: ' + result.message);
         }
     } catch (error) {

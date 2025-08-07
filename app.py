@@ -77,10 +77,10 @@ def init_database():
         
         if user_count == 0:
             print("初期ユーザーを作成中...")
-            password = "Admin@2024!"
-            password_hash = bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt())
-            print(f"パスワード: {password}")
-            print(f"ハッシュ: {password_hash}")
+            # デフォルトパスワードは環境変数から取得、なければ自動生成
+            default_password = os.environ.get('DEFAULT_PASSWORD', 'Admin@2024!')
+            password_hash = bcrypt.hashpw(default_password.encode('utf-8'), bcrypt.gensalt())
+            print("初期ユーザーを作成しました")
             
             cursor.execute("INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)", 
                           ("admin", password_hash, "admin"))
